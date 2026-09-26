@@ -1,25 +1,69 @@
-# CODING AGENTS: READ THIS FIRST
+# Lockedin
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+A daily, weekly and monthly planner you can install as an app (PWA). Anyone can create a free account, and administrators get a panel to manage users.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+- **Day**: a timeline where each task's block height matches how long it takes. Tick tasks off, and gaps of 30 minutes or more show as free time.
+- **Week**: a 7-day grid of tasks, plus a list of weekly goals.
+- **Month**: a calendar with a colored dot per task, plus a list of monthly goals.
+- **Tasks**: name, icon, date, start time, duration, color, and repeat (once, daily, weekly or monthly).
+- **Admin panel**: usage stats, user search, switching people between user and admin, suspending accounts (which signs them out everywhere) and deleting users.
+- **Responsive**: phones get a bottom nav bar and a bottom sheet. Screens 900px wide or more get a sidebar and a centered dialog.
 
-## What you should do — IMPORTANT
+The original Claude Design handoff (prototype, chat transcript and the original blue logo) is kept in [`design/`](design/).
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+## Stack
 
-**Read `project/Lockedin.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+| Part | What |
+| --- | --- |
+| Frontend | React 19, Vite, TypeScript, `vite-plugin-pwa` (manifest and offline app shell) |
+| Backend | Node and Express 5, serving the API at `/api` and the built app |
+| Database | PostgreSQL (tables are created automatically on startup) |
+| Auth | Email and password (bcrypt), with an httpOnly session cookie stored in Postgres |
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+Fonts are self-hosted: Manrope and JetBrains Mono come from npm, and the Material Symbols icons are a small subset in `src/fonts/`. If you use a new icon, add it to `scripts/fetch-icon-font.sh` and run the script.
 
-## About the design files
+## Deploying to Railway
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+1. Push this repository to GitHub.
+2. In Railway, choose **New Project → Deploy from GitHub repo** and pick the repository. Railway reads `railway.json`, which builds with `npm run build`, starts with `npm start` and health-checks `/api/health`.
+3. In the same project, click **+ New → Database → PostgreSQL**.
+4. Open the Lockedin service → **Variables** and add:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
+   - `ADMIN_EMAIL`: your email. This account is created as an administrator on startup (or promoted, if it already exists).
+   - `ADMIN_PASSWORD`: a strong password for that account. It is only used the first time the account is created. Changing the variable later does not change the password.
+   - `ADMIN_NAME` (optional): the display name for that account.
+5. Open **Settings → Networking → Generate Domain** to get a public HTTPS address. Open it on your phone and use **Add to Home Screen** to install Lockedin.
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+Railway sets `PORT` automatically. Don't set `SEED_DEMO` in production: it creates demo accounts with public passwords.
 
-## Bundle contents
+## Running locally
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Lockedin daily planner PWA` project files (HTML prototypes, assets, components)
+Requires Node 20+ and a PostgreSQL database.
+
+```bash
+npm install
+cp .env.example .env        # then edit DATABASE_URL and the admin settings
+npm run dev                 # API on :3000, app on http://localhost:5173
+```
+
+Set `SEED_DEMO=true` in `.env` to start an empty database with the demo accounts from the design (`admin@lockedin.app` / `admin123`, `maya@example.com` / `maya123`) and a sample routine.
+
+Other scripts:
+
+```bash
+npm run build     # typecheck, build the PWA into dist/client and bundle the server to dist/server.js
+npm start         # run the production build
+npm test          # API integration tests (drops and recreates the tables in TEST_DATABASE_URL)
+```
+
+`npm test` uses `TEST_DATABASE_URL`, which defaults to `postgres://postgres:postgres@localhost:5432/lockedin_test`. Point it at a throwaway database.
+
+## Project layout
+
+```
+server/      Express API: auth.ts (sessions), app.ts (routes), db.ts (schema), seed.ts
+shared/      Types and date/repeat logic used by both server and client
+src/         React app: App.tsx (layout and state), components/, styles.css
+public/      Logo and app icons
+design/      The original Claude Design handoff
+```
