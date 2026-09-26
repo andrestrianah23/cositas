@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { endSession, hashPassword, loadUser, requireAdmin, requireUser, startSession, verifyPassword } from './auth';
 import { TASK_COLS, toTask, toUser, type Db, type UserRow } from './db';
+import { pushRoutes } from './push';
 import { isDoneKey, isHm, isYmd } from '../shared/dates';
 import { COLOR_COUNT, DURATIONS, ICONS, REPEATS, type AdminStats, type AdminUser, type Task, type TimedTaskInput } from '../shared/types';
 
@@ -258,6 +259,9 @@ export function createApp(db: Db) {
     if (!rowCount) throw new HttpError(404, 'User not found');
     res.json({ ok: true });
   });
+
+  // ---------- Push reminders ----------
+  pushRoutes(api, db);
 
   api.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });

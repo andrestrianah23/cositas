@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['logo-mark.png', 'icon-192.png', 'icon-512.png', 'icon-maskable.png'],
+      includeAssets: ['push-sw.js', 'logo-mark.png', 'icon-192.png', 'icon-512.png', 'icon-maskable.png'],
       manifest: {
         name: 'Lockedin',
         short_name: 'Lockedin',
@@ -27,6 +27,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['push-sw.js'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,png,svg,woff2,webmanifest}'],

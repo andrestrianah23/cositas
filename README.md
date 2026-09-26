@@ -7,6 +7,7 @@ A daily, weekly and monthly planner you can install as an app (PWA). Anyone can 
 - **Month**: a calendar with a colored dot per task, plus a list of monthly goals.
 - **Tasks**: name, icon, date, start time, duration, color, and repeat (once, daily, weekly or monthly).
 - **Admin panel**: usage stats, user search, switching people between user and admin, suspending accounts (which signs them out everywhere) and deleting users.
+- **Install and reminders**: a card at the top of the planner walks people through installing the app (one tap on Android and desktop Chrome/Edge, Share → Add to Home Screen on iPhone), then asks them to turn on reminders. With reminders on, each device gets a push notification when a task starts, even when the app is closed. Reminders can be turned on, tested and turned off in Settings.
 - **Responsive**: phones get a bottom nav bar and a bottom sheet. Screens 900px wide or more get a sidebar and a centered dialog.
 
 The original Claude Design handoff (prototype, chat transcript and the original blue logo) is kept in [`design/`](design/).
@@ -33,6 +34,8 @@ Fonts are self-hosted: Manrope and JetBrains Mono come from npm, and the Materia
    - `ADMIN_PASSWORD`: a strong password for that account. It is only used the first time the account is created. Changing the variable later does not change the password.
    - `ADMIN_NAME` (optional): the display name for that account.
 5. Open **Settings → Networking → Generate Domain** to get a public HTTPS address. Open it on your phone and use **Add to Home Screen** to install Lockedin.
+
+Push notifications need no extra setup: the server generates its signing keys (VAPID) on first start and keeps them in the database. To manage the keys yourself instead, set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate them with `npx web-push generate-vapid-keys`). Changing the keys later turns reminders off on every device until people turn them back on.
 
 Railway sets `PORT` automatically. Don't set `SEED_DEMO` in production: it creates demo accounts with public passwords.
 
@@ -61,7 +64,7 @@ npm test          # API integration tests (drops and recreates the tables in TES
 ## Project layout
 
 ```
-server/      Express API: auth.ts (sessions), app.ts (routes), db.ts (schema), seed.ts
+server/      Express API: auth.ts (sessions), app.ts (routes), db.ts (schema), push.ts (reminders), seed.ts
 shared/      Types and date/repeat logic used by both server and client
 src/         React app: App.tsx (layout and state), components/, styles.css
 public/      Logo and app icons

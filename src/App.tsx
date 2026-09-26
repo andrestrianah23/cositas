@@ -10,11 +10,10 @@ import { Goals } from './components/Goals';
 import { AdminView } from './components/AdminView';
 import { SettingsView } from './components/SettingsView';
 import { TaskSheet, type Draft } from './components/TaskSheet';
+import { Nudge } from './components/Nudge';
+import { forgetDevice, usePwa } from './pwa';
 
 type View = 'day' | 'week' | 'month' | 'admin' | 'settings';
-interface InstallPrompt extends Event {
-  prompt: () => Promise<void>;
-}
 
 const CAL_VIEWS: [View, string][] = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']];
 
@@ -38,9 +37,9 @@ export function App() {
   const [sel, setSel] = useState(() => ymd(new Date()));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [toast, setToast] = useState('');
-  const [installEvt, setInstallEvt] = useState<InstallPrompt | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const today = ymd(new Date());
+  const pwa = usePwa(!!me);
 
   const flash = useCallback((m: string) => {
     setToast(m);
@@ -72,12 +71,6 @@ export function App() {
     api.me()
       .then(({ user }) => (user ? enter(user) : setMe(null)))
       .catch(() => setMe(null));
-    const bip = (e: Event) => {
-      e.preventDefault();
-      setInstallEvt(e as InstallPrompt);
-    };
-    window.addEventListener('beforeinstallprompt', bip);
-    return () => window.removeEventListener('beforeinstallprompt', bip);
   }, [enter, signedOut]);
 
   const timed = useMemo(() => tasks.filter((t) => t.kind === 'timed'), [tasks]);
@@ -153,6 +146,7 @@ export function App() {
   };
 
   const signOut = async () => {
+    await forgetDevice();
     try {
       await api.signOut();
     } catch {
@@ -247,6 +241,8 @@ export function App() {
               )}
             </header>
 
+            {isCal && <Nudge pwa={pwa} flash={flash} />}
+
             {isCal && (
               <div className="seg view-tabs">
                 {CAL_VIEWS.map(([k, label]) => (
@@ -278,8 +274,7 @@ export function App() {
                 me={me}
                 onUser={setMe}
                 flash={flash}
-                canInstall={!!installEvt}
-                install={() => { installEvt?.prompt(); setInstallEvt(null); }}
+                pwa={pwa}
                 signOut={signOut}
               />
             )}

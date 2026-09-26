@@ -256,3 +256,21 @@ main { flex: 1; min-width: 0; display: flex; justify-content: center; }
 .loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
 .loading img { width: 56px; height: 56px; border-radius: 16px; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.5; transform: scale(0.96); } }
+
+/* ---------- Install / reminders nudge ---------- */
+.nudge { display: flex; gap: 14px; padding: 18px; margin-bottom: 18px; align-items: flex-start; }
+.nudge-icon { width: 44px; height: 44px; border-radius: 14px; background: var(--accent-soft); color: var(--accent-soft-fg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nudge-icon .ms { font-size: 24px; }
+.nudge-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.nudge-title { font-weight: 800; font-size: 16px; }
+.nudge-text { font-size: 14px; color: var(--muted); line-height: 1.45; }
+.nudge-steps { margin: 2px 0 0; padding-left: 20px; font-size: 14px; color: var(--muted); line-height: 1.6; }
+.nudge-steps strong { color: var(--ink); }
+.ms.inline { font-size: 17px; vertical-align: -3px; color: var(--ink); }
+.nudge-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.nudge-actions .btn-accent { padding: 10px 16px; }
+.nudge-later { border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: 14px; padding: 10px 8px; cursor: pointer; }
+.nudge-later:hover { color: var(--ink); }
+.btn-accent:disabled, .btn-outline:disabled { opacity: 0.6; cursor: default; }
+.reminder-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.reminder-actions .btn-outline { padding: 10px 14px; }

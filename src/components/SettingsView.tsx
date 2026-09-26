@@ -1,18 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import type { Pwa } from '../pwa';
 import type { User } from '../../shared/types';
 
 interface Props {
   me: User;
   onUser: (u: User) => void;
   flash: (m: string) => void;
-  canInstall: boolean;
-  install: () => void;
+  pwa: Pwa;
   signOut: () => void;
 }
 
-export function SettingsView({ me, onUser, flash, canInstall, install, signOut }: Props) {
+const PUSH_TEXT: Record<Pwa['push'], string> = {
+  on: 'On for this device. You’ll get a notification when each task starts.',
+  off: 'Off for this device.',
+  default: 'Get a notification the moment each task starts, even when Lockedin is closed.',
+  denied: 'Notifications are blocked for Lockedin. Allow them in your browser or phone settings (Site settings → Notifications), then come back here.',
+  'needs-install': 'On iPhone and iPad, reminders work once Lockedin is on your home screen. Install it first (see above), then open it from the home screen.',
+  unsupported: 'This browser can’t show notifications. Try Chrome, Edge, Firefox or Safari.',
+};
+
+export function SettingsView({ me, onUser, flash, pwa, signOut }: Props) {
   const [name, setName] = useState(me.name);
+  const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const save = async (v: string) => {
@@ -35,6 +45,23 @@ export function SettingsView({ me, onUser, flash, canInstall, install, signOut }
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const installText = pwa.installed
+    ? 'Lockedin is installed on this device.'
+    : pwa.method === 'prompt'
+      ? 'Add Lockedin to your home screen for one-tap access and reminders.'
+      : pwa.method === 'ios'
+        ? 'In Safari, tap Share, then “Add to Home Screen”.'
+        : 'Use your browser’s “Install app” or “Add to Home Screen” option to keep Lockedin one tap away.';
+
   return (
     <div className="settings">
       <div className="card profile">
@@ -48,11 +75,43 @@ export function SettingsView({ me, onUser, flash, canInstall, install, signOut }
       <div className="card install">
         <div className="install-text">
           <div className="card-title">Install Lockedin</div>
-          <div className="install-sub">
-            {canInstall ? 'Add Lockedin to your home screen for one-tap access.' : 'Use your browser’s “Add to Home Screen” or install option to keep Lockedin one tap away.'}
-          </div>
+          <div className="install-sub">{installText}</div>
         </div>
-        {canInstall && <button className="btn-accent" onClick={install}>Install app</button>}
+        {!pwa.installed && pwa.method === 'prompt' && (
+          <button className="btn-accent" onClick={async () => { if (await pwa.install()) flash('Lockedin installed'); }}>Install app</button>
+        )}
+      </div>
+      <div className="card install">
+        <div className="install-text">
+          <div className="card-title">Reminders</div>
+          <div className="install-sub">{PUSH_TEXT[pwa.push]}</div>
+        </div>
+        {(pwa.push === 'default' || pwa.push === 'off') && (
+          <button
+            className="btn-accent"
+            disabled={busy}
+            onClick={() => run(async () => {
+              const r = await pwa.enablePush();
+              if (r.on) flash('Reminders are on');
+              else if (r.error) flash(r.error);
+            })}
+          >
+            Turn on
+          </button>
+        )}
+        {pwa.push === 'on' && (
+          <div className="reminder-actions">
+            <button className="btn-outline" disabled={busy} onClick={() => run(async () => {
+              try {
+                await api.pushTest();
+                flash('Test notification sent');
+              } catch (e) {
+                flash((e as Error).message);
+              }
+            })}>Send a test</button>
+            <button className="btn-outline" disabled={busy} onClick={() => run(async () => { await pwa.disablePush(); flash('Reminders are off'); })}>Turn off</button>
+          </div>
+        )}
       </div>
       <button className="btn-signout" onClick={signOut}><span className="ms">logout</span>Sign out</button>
     </div>

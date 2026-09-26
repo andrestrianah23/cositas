@@ -47,7 +47,12 @@ export const api = {
   toggle: (id: string, key: string) => request<{ task: Task }>('POST', `/tasks/${id}/toggle`, { key }),
   deleteTask: (id: string) => request<{ ok: true }>('DELETE', `/tasks/${id}`),
 
-  adminOverview: () => request<{ users: AdminUser[]; stats: AdminStats }>('GET', '/admin/overview'),
+  pushKey: () => request<{ publicKey: string }>('GET', '/push/key'),
+  pushSubscribe: (subscription: PushSubscriptionJSON, tz: string) => request<{ ok: true }>('POST', '/push/subscribe', { subscription, tz }),
+  pushUnsubscribe: (endpoint: string) => request<{ ok: true }>('POST', '/push/unsubscribe', { endpoint }),
+  pushTest: () => request<{ sent: number }>('POST', '/push/test'),
+
+  adminOverview:() => request<{ users: AdminUser[]; stats: AdminStats }>('GET', '/admin/overview'),
   adminUpdate: (id: string, patch: { role?: User['role']; status?: User['status'] }) => request<{ user: User }>('PATCH', `/admin/users/${id}`, patch),
   adminDelete: (id: string) => request<{ ok: true }>('DELETE', `/admin/users/${id}`),
 };

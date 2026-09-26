@@ -7,6 +7,7 @@ import type { Server } from 'node:http';
 import { createApp } from './app';
 import { createPool, migrate } from './db';
 import { ensureAdmin } from './seed';
+import { initPush, localNow, sendDueReminders } from './push';
 
 const db = createPool(process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/lockedin_test');
 let server: Server;
@@ -31,9 +32,10 @@ function client() {
 const timed = { kind: 'timed', title: 'Yoga', date: '2026-09-01', start: '07:15', dur: 30, color: 1, icon: 'self_improvement', repeat: 'daily' };
 
 before(async () => {
-  await db.query('DROP TABLE IF EXISTS tasks, sessions, users CASCADE');
+  await db.query('DROP TABLE IF EXISTS push_log, push_subscriptions, app_settings, tasks, sessions, users CASCADE');
   await migrate(db);
   await ensureAdmin(db, { ADMIN_EMAIL: 'Boss@Lockedin.app', ADMIN_PASSWORD: 'boss-pass' });
+  await initPush(db, {});
   server = createApp(db).listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -166,5 +168,50 @@ describe('admin', () => {
     assert.equal(after.body.stats.totalUsers, 3);
     const { rows } = await db.query('SELECT count(*)::int AS n FROM tasks t JOIN users u ON u.id = t.user_id WHERE u.email = $1', ['ben@example.com']);
     assert.equal(rows[0].n, 0);
+  });
+});
+
+describe('push reminders', () => {
+  const sub = (n: number) => ({ endpoint: `https://push.example.com/send/${n}`, keys: { p256dh: 'BExamplePublicKey', auth: 'authsecret' } });
+
+  test('localNow reads the wall clock in a time zone', () => {
+    const at = new Date('2026-09-26T13:05:00Z');
+    assert.deepEqual(localNow('America/New_York', at), { ds: '2026-09-26', min: 9 * 60 + 5 });
+    assert.deepEqual(localNow('Asia/Tokyo', at), { ds: '2026-09-26', min: 22 * 60 + 5 });
+    assert.deepEqual(localNow('Pacific/Kiritimati', new Date('2026-09-26T13:05:00Z')), { ds: '2026-09-27', min: 3 * 60 + 5 });
+  });
+
+  test('subscribe validates input and requires sign-in', async () => {
+    assert.equal((await client()('POST', '/api/push/subscribe', { subscription: sub(1), tz: 'UTC' })).status, 401);
+    const a = client();
+    await a('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    assert.equal((await a('POST', '/api/push/subscribe', { subscription: { ...sub(1), endpoint: 'http://insecure' }, tz: 'UTC' })).status, 400);
+    assert.equal((await a('POST', '/api/push/subscribe', { subscription: sub(1), tz: 'Mars/Olympus' })).status, 400);
+    assert.equal((await a('POST', '/api/push/subscribe', { subscription: sub(1), tz: 'UTC' })).status, 200);
+    assert.equal((await a('POST', '/api/push/unsubscribe', { endpoint: sub(1).endpoint })).status, 200);
+    const { rows } = await db.query('SELECT count(*)::int AS n FROM push_subscriptions');
+    assert.equal(rows[0].n, 0);
+  });
+
+  test('sends one reminder when a task starts in the user’s time zone', async () => {
+    const a = client();
+    await a('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    await a('POST', '/api/push/subscribe', { subscription: sub(2), tz: 'America/New_York' });
+    const daily = (await a('POST', '/api/tasks', { ...timed, title: 'Stretch', start: '09:00', date: '2026-09-01' })).body.task;
+    const later = (await a('POST', '/api/tasks', { ...timed, title: 'Lunch', start: '12:30', date: '2026-09-01' })).body.task;
+    const doneToday = (await a('POST', '/api/tasks', { ...timed, title: 'Walk', start: '09:00', date: '2026-09-01' })).body.task;
+    await a('POST', `/api/tasks/${doneToday.id}/toggle`, { key: '2026-09-26' });
+
+    const sent: { title: string }[] = [];
+    const fake = async (_db: unknown, _user: string, p: { title: string }) => (sent.push(p), 1);
+    const at = new Date('2026-09-26T13:01:00Z'); // 9:01 AM in New York
+    await sendDueReminders(db, at, fake);
+    await sendDueReminders(db, at, fake); // a second tick must not repeat it
+    assert.deepEqual(sent.map((p) => p.title), ['Stretch']);
+    assert.ok(!sent.some((p) => p.title === later.title));
+
+    await sendDueReminders(db, new Date('2026-09-27T13:00:30Z'), fake); // the next day, daily again
+    assert.deepEqual(sent.map((p) => p.title), ['Stretch', 'Stretch', 'Walk']);
+    await db.query('DELETE FROM tasks WHERE id = ANY($1)', [[daily.id, later.id, doneToday.id]]);
   });
 });

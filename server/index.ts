@@ -5,11 +5,13 @@ import express from 'express';
 import { createApp } from './app';
 import { createPool, migrate } from './db';
 import { ensureAdmin, seedDemo } from './seed';
+import { initPush, startReminderLoop } from './push';
 
 const db = createPool();
 await migrate(db);
 if (process.env.SEED_DEMO === 'true') await seedDemo(db);
 await ensureAdmin(db);
+await initPush(db);
 
 const app = createApp(db);
 
@@ -34,3 +36,4 @@ if (fs.existsSync(path.join(clientDir, 'index.html'))) {
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => console.log(`Lockedin listening on :${port}`));
+startReminderLoop(db);
