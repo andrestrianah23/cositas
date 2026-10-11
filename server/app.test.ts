@@ -215,3 +215,58 @@ describe('push reminders', () => {
     await db.query('DELETE FROM tasks WHERE id = ANY($1)', [[daily.id, later.id, doneToday.id]]);
   });
 });
+
+describe('onboarding and customer access', () => {
+  test('tutorial is shown once per account', async () => {
+    const c = client();
+    const up = await c('POST', '/api/auth/signup', { name: 'Newbie', email: 'new@example.com', password: 'new-pass' });
+    assert.equal(up.body.user.onboarded, false);
+    assert.equal((await c('POST', '/api/me/onboarded')).body.user.onboarded, true);
+    const other = client();
+    assert.equal((await other('POST', '/api/auth/signin', { email: 'new@example.com', password: 'new-pass' })).body.user.onboarded, true);
+  });
+
+  test('admin sees customer details, plan and CSV; customers cannot', async () => {
+    const admin = client(), cust = client();
+    await admin('POST', '/api/auth/signin', { email: 'boss@lockedin.app', password: 'boss-pass' });
+    await cust('POST', '/api/auth/signin', { email: 'new@example.com', password: 'new-pass' });
+    await cust('POST', '/api/tasks', { ...timed, title: '=HYPERLINK("x")' });
+    await cust('POST', '/api/tasks', { kind: 'week', title: 'Read a book', date: '2026-09-26' });
+    await cust('GET', '/api/tasks');
+
+    const ov = await admin('GET', '/api/admin/overview');
+    const row = ov.body.users.find((u: { email: string }) => u.email === 'new@example.com');
+    assert.equal(row.taskCount, 1);
+    assert.equal(row.goalCount, 1);
+    assert.ok(row.lastActive > Date.now() - 60_000);
+    assert.equal(row.devices, 0);
+
+    const detail = await admin('GET', `/api/admin/users/${row.id}`);
+    assert.equal(detail.body.user.email, 'new@example.com');
+    assert.equal(detail.body.tasks.length, 2);
+    assert.equal((await cust('GET', `/api/admin/users/${row.id}`)).status, 403);
+
+    const res = await fetch(base + '/api/admin/users.csv', { headers: { Cookie: (await signInCookie('boss@lockedin.app', 'boss-pass')) } });
+    assert.match(res.headers.get('content-disposition') ?? '', /attachment; filename="lockedin-customers-/);
+    const csv = await res.text();
+    assert.match(csv, /"Name","Email","Role"/);
+    assert.match(csv, /"Newbie","new@example.com","user","active"/);
+    assert.equal((await cust('GET', '/api/admin/users.csv')).status, 403);
+  });
+
+  test('admin notifications validate input and report when nobody can receive them', async () => {
+    const admin = client(), cust = client();
+    await admin('POST', '/api/auth/signin', { email: 'boss@lockedin.app', password: 'boss-pass' });
+    await cust('POST', '/api/auth/signin', { email: 'new@example.com', password: 'new-pass' });
+    assert.equal((await admin('POST', '/api/admin/notify', { title: '', body: 'x' })).status, 400);
+    const none = await admin('POST', '/api/admin/notify', { title: 'Hi', body: 'News' });
+    assert.equal(none.status, 400);
+    assert.equal(none.body.error, 'No customers have reminders turned on yet.');
+    assert.equal((await cust('POST', '/api/admin/notify', { title: 'Hi', body: 'News' })).status, 403);
+  });
+});
+
+async function signInCookie(email: string, password: string) {
+  const res = await fetch(base + '/api/auth/signin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+  return (res.headers.get('set-cookie') ?? '').split(';')[0];
+}

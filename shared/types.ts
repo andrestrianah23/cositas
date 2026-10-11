@@ -10,10 +10,24 @@ export interface User {
   role: Role;
   status: Status;
   created: number;
+  /** Whether they have finished or skipped the first-login tutorial. */
+  onboarded: boolean;
 }
 
 export interface AdminUser extends User {
+  /** Timed tasks on their timeline. */
   taskCount: number;
+  /** Weekly and monthly goals. */
+  goalCount: number;
+  /** Last time they opened the app, or null if never. */
+  lastActive: number | null;
+  /** Devices with reminders turned on. */
+  devices: number;
+}
+
+export interface NotifyResult {
+  people: number;
+  devices: number;
 }
 
 export interface AdminStats {

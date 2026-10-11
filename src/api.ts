@@ -1,4 +1,4 @@
-import type { AdminStats, AdminUser, Task, TimedTaskInput, User } from '../shared/types';
+import type { AdminStats, AdminUser, NotifyResult, Task, TimedTaskInput, User } from '../shared/types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -39,6 +39,7 @@ export const api = {
   signUp: (name: string, email: string, password: string) => request<{ user: User }>('POST', '/auth/signup', { name, email, password }),
   signOut: () => request<{ ok: true }>('POST', '/auth/signout'),
   rename: (name: string) => request<{ user: User }>('PATCH', '/me', { name }),
+  finishTutorial: () => request<{ user: User }>('POST', '/me/onboarded'),
 
   tasks: () => request<{ tasks: Task[] }>('GET', '/tasks'),
   createTask: (t: TimedTaskInput) => request<{ task: Task }>('POST', '/tasks', { ...t, kind: 'timed' }),
@@ -52,7 +53,9 @@ export const api = {
   pushUnsubscribe: (endpoint: string) => request<{ ok: true }>('POST', '/push/unsubscribe', { endpoint }),
   pushTest: () => request<{ sent: number }>('POST', '/push/test'),
 
-  adminOverview:() => request<{ users: AdminUser[]; stats: AdminStats }>('GET', '/admin/overview'),
+  adminOverview: () => request<{ users: AdminUser[]; stats: AdminStats }>('GET', '/admin/overview'),
   adminUpdate: (id: string, patch: { role?: User['role']; status?: User['status'] }) => request<{ user: User }>('PATCH', `/admin/users/${id}`, patch),
+  adminCustomer: (id: string) => request<{ user: AdminUser; tasks: Task[] }>('GET', `/admin/users/${id}`),
+  adminNotify: (title: string, body: string, userId?: string) => request<NotifyResult>('POST', '/admin/notify', { title, body, userId }),
   adminDelete: (id: string) => request<{ ok: true }>('DELETE', `/admin/users/${id}`),
 };

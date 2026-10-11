@@ -7,8 +7,9 @@ interface Props {
   today: string;
   onDay: (ds: string) => Task[];
   setSel: (ds: string) => void;
-  onEdit: (t: Task) => void;
-  onToggle: (t: Task, ds: string) => void;
+  /** Without onEdit/onToggle the timeline is read-only (the admin's view of a customer's plan). */
+  onEdit?: (t: Task) => void;
+  onToggle?: (t: Task, ds: string) => void;
 }
 
 export function DayView({ sel, today, onDay, setSel, onEdit, onToggle }: Props) {
@@ -37,7 +38,7 @@ export function DayView({ sel, today, onDay, setSel, onEdit, onToggle }: Props) 
           <div className="progress-label mono">{doneN}/{items.length}</div>
         </div>
         {!items.length && (
-          <div className="empty"><strong>Nothing planned</strong>Tap + to add a task to this day.</div>
+          <div className="empty"><strong>Nothing planned</strong>{onEdit ? 'Tap + to add a task to this day.' : 'No tasks on this day.'}</div>
         )}
         {items.map((t, i) => {
           const st = toMin(t.start!), dur = t.dur!, en = st + dur, done = !!t.done[sel], nx = items[i + 1];
@@ -48,12 +49,12 @@ export function DayView({ sel, today, onDay, setSel, onEdit, onToggle }: Props) 
             <div className="item" key={t.id}>
               <div className="item-start mono">{fmtT(st)}</div>
               <div className="item-rail">
-                <button className="tile" onClick={() => onEdit(t)} aria-label={`Edit ${t.title}`} style={{ height: Math.min(52 + Math.max(0, dur - 15) * 0.8, 160), background: color, opacity: done ? 0.45 : 1 }}>
+                <button className="tile" disabled={!onEdit} onClick={() => onEdit?.(t)} aria-label={onEdit ? `Edit ${t.title}` : t.title} style={{ height: Math.min(52 + Math.max(0, dur - 15) * 0.8, 160), background: color, opacity: done ? 0.45 : 1 }}>
                   <span className="ms">{t.icon}</span>
                 </button>
                 <div className="rail-line" style={{ background: nx ? LINE : 'transparent' }} />
               </div>
-              <div className="item-body" onClick={() => onEdit(t)}>
+              <div className="item-body" onClick={() => onEdit?.(t)} style={onEdit ? undefined : { cursor: 'default' }}>
                 <div className="item-range mono">
                   {fmtT(st)} – {fmtT(en)} ({fmtD(dur)})
                   {repeat && <span className="repeat-chip"><span className="ms">repeat</span>{repeat}</span>}
@@ -62,7 +63,7 @@ export function DayView({ sel, today, onDay, setSel, onEdit, onToggle }: Props) 
                 {gap >= 30 && <div className="item-gap">{fmtD(gap)} free</div>}
               </div>
               <div className="item-check">
-                <button className="check" onClick={() => onToggle(t, sel)} aria-label={done ? `Mark ${t.title} not done` : `Mark ${t.title} done`} aria-pressed={done} style={{ borderColor: color, background: done ? color : 'transparent' }}>
+                <button className="check" disabled={!onToggle} onClick={() => onToggle?.(t, sel)} aria-label={done ? `Mark ${t.title} not done` : `Mark ${t.title} done`} aria-pressed={done} style={{ borderColor: color, background: done ? color : 'transparent' }}>
                   <span className="ms">{done ? 'check' : ''}</span>
                 </button>
               </div>

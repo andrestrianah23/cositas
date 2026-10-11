@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import { MONTHS } from '../../shared/dates';
 import type { AdminStats, AdminUser, User } from '../../shared/types';
+import { ago, Badges } from './adminBits';
+import { CustomerView } from './CustomerView';
+import { NotifyForm } from './NotifyForm';
 
 export function AdminView({ me, flash }: { me: User; flash: (m: string) => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [q, setQ] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -23,28 +26,15 @@ export function AdminView({ me, flash }: { me: User; flash: (m: string) => void 
     load();
   }, [load]);
 
-  const act = async (id: string, fn: () => Promise<unknown>, msg: string) => {
-    setBusy(id);
-    try {
-      await fn();
-      flash(msg);
-      await load();
-    } catch (e) {
-      flash((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
+  const back = useCallback(() => setOpen(null), []);
+
+  if (open) return <CustomerView id={open} me={me} flash={flash} onBack={back} onChanged={load} />;
 
   const ql = q.trim().toLowerCase();
   const shown = users.filter((u) => !ql || u.name.toLowerCase().includes(ql) || u.email.includes(ql));
-  const statList = stats
-    ? [
-        ['Total users', stats.totalUsers],
-        ['Active', stats.activeUsers],
-        ['New this week', stats.newThisWeek],
-        ['Tasks & goals', stats.totalTasks],
-      ]
+  const reachable = users.filter((u) => u.devices > 0 && u.status === 'active').length;
+  const statList: [string, number | string][] = stats
+    ? [['Total users', stats.totalUsers], ['Active', stats.activeUsers], ['New this week', stats.newThisWeek], ['Tasks & goals', stats.totalTasks]]
     : [['Total users', '–'], ['Active', '–'], ['New this week', '–'], ['Tasks & goals', '–']];
 
   return (
@@ -57,38 +47,42 @@ export function AdminView({ me, flash }: { me: User; flash: (m: string) => void 
           </div>
         ))}
       </div>
+
+      <div className="card goals" style={{ marginBottom: 20 }}>
+        <div className="goals-head" style={{ marginBottom: composing ? 12 : 0, alignItems: 'center' }}>
+          <div>
+            <div className="card-title">Message customers</div>
+            <div className="goals-count">{reachable} {reachable === 1 ? 'customer has' : 'customers have'} reminders on and can receive notifications</div>
+          </div>
+          {!composing && <button className="btn-outline" onClick={() => setComposing(true)}><span className="ms inline">campaign</span> Write</button>}
+        </div>
+        {composing && <NotifyForm audience={`all ${reachable} ${reachable === 1 ? 'customer' : 'customers'} with reminders on`} flash={flash} />}
+      </div>
+
       <div className="card users">
         <div className="users-head">
-          <div className="card-title">Users</div>
-          <input className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email" />
+          <div className="card-title">Customers</div>
+          <div className="users-tools">
+            <input className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email" />
+            <a className="btn-outline csv" href="/api/admin/users.csv" download><span className="ms inline">download</span> CSV</a>
+          </div>
         </div>
-        {shown.map((u) => {
-          const ad = u.role === 'admin', active = u.status === 'active', self = u.id === me.id, dt = new Date(u.created);
-          return (
-            <div className="user-row" key={u.id}>
-              <div className="user-main">
-                <div className="user-avatar">{u.name[0]?.toUpperCase()}</div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="user-name">
-                    {u.name}
-                    <span className="badge" style={{ background: ad ? 'oklch(0.94 0.04 290)' : '#f0ece7', color: ad ? 'oklch(0.42 0.14 290)' : '#5b544d' }}>{ad ? 'Admin' : 'User'}</span>
-                    <span className="badge" style={{ background: active ? 'oklch(0.94 0.05 150)' : 'oklch(0.95 0.03 30)', color: active ? 'oklch(0.42 0.12 150)' : 'oklch(0.45 0.14 30)' }}>{active ? 'Active' : 'Suspended'}</span>
-                  </div>
-                  <div className="user-meta">{u.email} · {u.taskCount} tasks · joined {dt.getDate()} {MONTHS[dt.getMonth()].slice(0, 3)}</div>
+        {shown.map((u) => (
+          <button className="user-row customer-row" key={u.id} onClick={() => setOpen(u.id)}>
+            <div className="user-main">
+              <div className="user-avatar">{u.name[0]?.toUpperCase()}</div>
+              <div style={{ minWidth: 0 }}>
+                <div className="user-name">{u.name}<Badges u={u} />{u.id === me.id && <span className="you">You</span>}</div>
+                <div className="user-meta">
+                  {u.email} · {u.taskCount} tasks · {u.goalCount} goals · {u.lastActive ? `active ${ago(u.lastActive)}` : 'never opened'}
+                  {u.devices > 0 && <> · <span className="ms inline small">notifications_active</span></>}
                 </div>
               </div>
-              {self ? (
-                <div className="you">You</div>
-              ) : (
-                <div className="user-actions">
-                  <button disabled={busy === u.id} onClick={() => act(u.id, () => api.adminUpdate(u.id, { role: ad ? 'user' : 'admin' }), ad ? `${u.name} is now a user` : `${u.name} is now an admin`)}>{ad ? 'Make user' : 'Make admin'}</button>
-                  <button disabled={busy === u.id} onClick={() => act(u.id, () => api.adminUpdate(u.id, { status: active ? 'suspended' : 'active' }), active ? `${u.name} suspended` : `${u.name} activated`)}>{active ? 'Suspend' : 'Activate'}</button>
-                  <button className="danger" disabled={busy === u.id} onClick={() => confirm(`Delete ${u.name} and all their tasks?`) && act(u.id, () => api.adminDelete(u.id), `${u.name} deleted`)}>Delete</button>
-                </div>
-              )}
             </div>
-          );
-        })}
+            <span className="ms chev">chevron_right</span>
+          </button>
+        ))}
+        {!shown.length && <div className="empty">{users.length ? 'No customers match your search.' : 'No customers yet.'}</div>}
       </div>
     </>
   );

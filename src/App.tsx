@@ -11,6 +11,7 @@ import { AdminView } from './components/AdminView';
 import { SettingsView } from './components/SettingsView';
 import { TaskSheet, type Draft } from './components/TaskSheet';
 import { Nudge } from './components/Nudge';
+import { Tour } from './components/Tour';
 import { forgetDevice, usePwa } from './pwa';
 
 type View = 'day' | 'week' | 'month' | 'admin' | 'settings';
@@ -37,6 +38,7 @@ export function App() {
   const [sel, setSel] = useState(() => ymd(new Date()));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [toast, setToast] = useState('');
+  const [touring, setTouring] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const today = ymd(new Date());
   const pwa = usePwa(!!me);
@@ -51,6 +53,7 @@ export function App() {
     setMe(null);
     setTasks([]);
     setDraft(null);
+    setTouring(false);
     setView('day');
   }, []);
 
@@ -58,6 +61,8 @@ export function App() {
     setMe(u);
     setView('day');
     setSel(ymd(new Date()));
+    // First sign-in on this account: walk them through the app.
+    setTouring(!u.onboarded);
     try {
       setTasks((await api.tasks()).tasks);
     } catch (e) {
@@ -241,7 +246,7 @@ export function App() {
               )}
             </header>
 
-            {isCal && <Nudge pwa={pwa} flash={flash} />}
+            {isCal && !touring && <Nudge pwa={pwa} flash={flash} />}
 
             {isCal && (
               <div className="seg view-tabs">
@@ -275,6 +280,7 @@ export function App() {
                 onUser={setMe}
                 flash={flash}
                 pwa={pwa}
+                replayTour={() => setTouring(true)}
                 signOut={signOut}
               />
             )}
@@ -295,6 +301,21 @@ export function App() {
               </button>
             ))}
           </nav>
+        )}
+
+        {touring && (
+          <Tour
+            name={me.name}
+            admin={admin}
+            isWide={isWide}
+            setView={setView}
+            onDone={(addTask) => {
+              setTouring(false);
+              setView('day');
+              if (addTask) openSheet(null);
+              if (!me.onboarded) api.finishTutorial().then((r) => setMe(r.user)).catch(() => {});
+            }}
+          />
         )}
 
         {draft && <TaskSheet draft={draft} isWide={isWide} onClose={() => setDraft(null)} onSave={saveSheet} onDelete={deleteSheet} flash={flash} />}

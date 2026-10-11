@@ -3,9 +3,9 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { endSession, hashPassword, loadUser, requireAdmin, requireUser, startSession, verifyPassword } from './auth';
 import { TASK_COLS, toTask, toUser, type Db, type UserRow } from './db';
-import { pushRoutes } from './push';
+import { pushRoutes, sendToUser } from './push';
 import { isDoneKey, isHm, isYmd } from '../shared/dates';
-import { COLOR_COUNT, DURATIONS, ICONS, REPEATS, type AdminStats, type AdminUser, type Task, type TimedTaskInput } from '../shared/types';
+import { COLOR_COUNT, DURATIONS, ICONS, REPEATS, type AdminStats, type AdminUser, type NotifyResult, type Task, type TimedTaskInput } from '../shared/types';
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -143,6 +143,12 @@ export function createApp(db: Db) {
     res.json({ user: toUser(rows[0]) });
   });
 
+  /** Marks the first-login tutorial as finished (or skipped) so it doesn't show again on any device. */
+  api.post('/me/onboarded', requireUser, async (req, res) => {
+    const { rows } = await db.query<UserRow>('UPDATE users SET onboarded_at = COALESCE(onboarded_at, now()) WHERE id = $1 RETURNING *', [req.user!.id]);
+    res.json({ user: toUser(rows[0]) });
+  });
+
   // ---------- Tasks & goals ----------
   const ownTask = async (req: Request) => {
     const id = String(req.params.id);
@@ -153,6 +159,8 @@ export function createApp(db: Db) {
   };
 
   api.get('/tasks', requireUser, async (req, res) => {
+    // Loading the plan means they opened the app: record it for the admin's "last active" (at most every 5 minutes).
+    await db.query(`UPDATE users SET last_active_at = now() WHERE id = $1 AND (last_active_at IS NULL OR last_active_at < now() - interval '5 minutes')`, [req.user!.id]);
     const { rows } = await db.query<Task>(`SELECT ${TASK_COLS} FROM tasks WHERE user_id = $1 ORDER BY created_at`, [req.user!.id]);
     res.json({ tasks: rows.map(toTask) });
   });
@@ -214,14 +222,34 @@ export function createApp(db: Db) {
   });
 
   // ---------- Admin ----------
-  api.get('/admin/overview', requireAdmin, async (_req, res) => {
-    const { rows } = await db.query<UserRow & { task_count: string }>(
-      `SELECT u.*, (SELECT count(*) FROM tasks t WHERE t.user_id = u.id) AS task_count
-       FROM users u ORDER BY u.created_at`,
+  const adminUsers = async (where = '', params: unknown[] = []) => {
+    const { rows } = await db.query<UserRow & { task_count: string; goal_count: string; devices: string }>(
+      `SELECT u.*,
+         (SELECT count(*) FROM tasks t WHERE t.user_id = u.id AND t.kind = 'timed') AS task_count,
+         (SELECT count(*) FROM tasks t WHERE t.user_id = u.id AND t.kind <> 'timed') AS goal_count,
+         (SELECT count(*) FROM push_subscriptions p WHERE p.user_id = u.id) AS devices
+       FROM users u ${where} ORDER BY u.created_at`,
+      params,
     );
+    return rows.map((r): AdminUser => ({
+      ...toUser(r),
+      taskCount: Number(r.task_count),
+      goalCount: Number(r.goal_count),
+      lastActive: r.last_active_at?.getTime() ?? null,
+      devices: Number(r.devices),
+    }));
+  };
+
+  const userId = (req: Request) => {
+    const id = String(req.params.id);
+    if (!UUID_RE.test(id)) throw new HttpError(404, 'User not found');
+    return id;
+  };
+
+  api.get('/admin/overview', requireAdmin, async (_req, res) => {
+    const users = await adminUsers();
     const { rows: [tc] } = await db.query<{ n: string }>('SELECT count(*) AS n FROM tasks');
     const weekAgo = Date.now() - 7 * 864e5;
-    const users: AdminUser[] = rows.map((r) => ({ ...toUser(r), taskCount: Number(r.task_count) }));
     const stats: AdminStats = {
       totalUsers: users.length,
       activeUsers: users.filter((u) => u.status === 'active').length,
@@ -231,9 +259,63 @@ export function createApp(db: Db) {
     res.json({ users, stats });
   });
 
+  /** A customer's profile and plan, read-only, for support. */
+  api.get('/admin/users/:id', requireAdmin, async (req, res) => {
+    const [user] = await adminUsers('WHERE u.id = $1', [userId(req)]);
+    if (!user) throw new HttpError(404, 'User not found');
+    const { rows } = await db.query<Task>(`SELECT ${TASK_COLS} FROM tasks WHERE user_id = $1 ORDER BY created_at`, [user.id]);
+    res.json({ user, tasks: rows.map(toTask) });
+  });
+
+  api.get('/admin/users.csv', requireAdmin, async (_req, res) => {
+    const users = await adminUsers();
+    const iso = (t: number | null) => (t === null ? '' : new Date(t).toISOString().slice(0, 10));
+    // Quote every cell, and defuse values a spreadsheet would run as a formula.
+    const cell = (v: string | number) => {
+      let s = String(v);
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const lines = [
+      ['Name', 'Email', 'Role', 'Status', 'Joined', 'Last active', 'Tasks', 'Goals', 'Reminder devices'],
+      ...users.map((u) => [u.name, u.email, u.role, u.status, iso(u.created), iso(u.lastActive), u.taskCount, u.goalCount, u.devices]),
+    ].map((row) => row.map(cell).join(','));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="lockedin-customers-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send('\uFEFF' + lines.join('\r\n') + '\r\n');
+  });
+
+  /** Push a message to one customer (userId) or to everyone with reminders turned on. */
+  api.post('/admin/notify', requireAdmin, async (req, res) => {
+    const title = str(req.body?.title, 80);
+    const body = str(req.body?.body, 300);
+    if (!title) throw bad('Add a title for the notification.');
+    if (!body) throw bad('Add a message for the notification.');
+    let ids: string[];
+    if (req.body?.userId !== undefined) {
+      const id = String(req.body.userId);
+      if (!UUID_RE.test(id)) throw new HttpError(404, 'User not found');
+      ids = [id];
+    } else {
+      const { rows } = await db.query<{ user_id: string }>(
+        `SELECT DISTINCT p.user_id FROM push_subscriptions p JOIN users u ON u.id = p.user_id WHERE u.status = 'active'`,
+      );
+      ids = rows.map((r) => r.user_id);
+    }
+    const result: NotifyResult = { people: 0, devices: 0 };
+    for (const id of ids) {
+      const n = await sendToUser(db, id, { title, body, url: '/', tag: `admin-${Date.now()}` });
+      if (n) {
+        result.people++;
+        result.devices += n;
+      }
+    }
+    if (!result.devices) throw bad(req.body?.userId !== undefined ? 'This customer has no device with reminders turned on.' : 'No customers have reminders turned on yet.');
+    res.json(result);
+  });
+
   const otherUser = (req: Request) => {
-    const id = String(req.params.id);
-    if (!UUID_RE.test(id)) throw new HttpError(404, 'User not found');
+    const id = userId(req);
     if (id === req.user!.id) throw bad('You cannot change your own account here.');
     return id;
   };

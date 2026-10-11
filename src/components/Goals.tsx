@@ -6,9 +6,10 @@ interface Props {
   placeholder: string;
   goals: Task[];
   doneKey: string;
-  onAdd: (title: string) => Promise<boolean>;
-  onToggle: (t: Task) => void;
-  onDelete: (t: Task) => void;
+  /** Without the handlers the list is read-only. */
+  onAdd?: (title: string) => Promise<boolean>;
+  onToggle?: (t: Task) => void;
+  onDelete?: (t: Task) => void;
 }
 
 export function Goals({ title, placeholder, goals, doneKey, onAdd, onToggle, onDelete }: Props) {
@@ -17,7 +18,7 @@ export function Goals({ title, placeholder, goals, doneKey, onAdd, onToggle, onD
 
   const add = async () => {
     const v = text.trim();
-    if (!v) return;
+    if (!v || !onAdd) return;
     setText('');
     if (!(await onAdd(v))) setText(v);
   };
@@ -32,18 +33,18 @@ export function Goals({ title, placeholder, goals, doneKey, onAdd, onToggle, onD
         const done = !!g.done[doneKey];
         return (
           <div className="goal" key={g.id}>
-            <button className={`goal-check${done ? ' on' : ''}`} onClick={() => onToggle(g)} aria-label={done ? `Mark ${g.title} not done` : `Mark ${g.title} done`} aria-pressed={done}>
+            <button className={`goal-check${done ? ' on' : ''}`} disabled={!onToggle} onClick={() => onToggle?.(g)} aria-label={done ? `Mark ${g.title} not done` : `Mark ${g.title} done`} aria-pressed={done}>
               <span className="ms">{done ? 'check' : ''}</span>
             </button>
             <div className={`goal-title${done ? ' done' : ''}`}>{g.title}</div>
-            <button className="goal-del" onClick={() => onDelete(g)} aria-label={`Delete ${g.title}`}><span className="ms">close</span></button>
+            {onDelete && <button className="goal-del" onClick={() => onDelete(g)} aria-label={`Delete ${g.title}`}><span className="ms">close</span></button>}
           </div>
         );
       })}
-      <div className="goal-add">
+      {onAdd && <div className="goal-add">
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder={placeholder} maxLength={200} />
         <button onClick={add}>Add</button>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS users (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash text PRIMARY KEY,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -82,6 +85,8 @@ export interface UserRow {
   role: User['role'];
   status: User['status'];
   created_at: Date;
+  onboarded_at: Date | null;
+  last_active_at: Date | null;
 }
 
 export const toUser = (r: UserRow): User => ({
@@ -91,6 +96,7 @@ export const toUser = (r: UserRow): User => ({
   role: r.role,
   status: r.status,
   created: r.created_at.getTime(),
+  onboarded: r.onboarded_at !== null,
 });
 
 export const TASK_COLS = 'id, kind, title, date, start, dur, color, icon, repeat, done';

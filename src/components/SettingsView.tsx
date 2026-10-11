@@ -8,6 +8,7 @@ interface Props {
   onUser: (u: User) => void;
   flash: (m: string) => void;
   pwa: Pwa;
+  replayTour: () => void;
   signOut: () => void;
 }
 
@@ -20,7 +21,7 @@ const PUSH_TEXT: Record<Pwa['push'], string> = {
   unsupported: 'This browser can’t show notifications. Try Chrome, Edge, Firefox or Safari.',
 };
 
-export function SettingsView({ me, onUser, flash, pwa, signOut }: Props) {
+export function SettingsView({ me, onUser, flash, pwa, replayTour, signOut }: Props) {
   const [name, setName] = useState(me.name);
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -112,6 +113,13 @@ export function SettingsView({ me, onUser, flash, pwa, signOut }: Props) {
             <button className="btn-outline" disabled={busy} onClick={() => run(async () => { await pwa.disablePush(); flash('Reminders are off'); })}>Turn off</button>
           </div>
         )}
+      </div>
+      <div className="card install">
+        <div className="install-text">
+          <div className="card-title">Tutorial</div>
+          <div className="install-sub">A one-minute walk through every tool in Lockedin.</div>
+        </div>
+        <button className="btn-outline" onClick={replayTour}><span className="ms inline">school</span> Replay tutorial</button>
       </div>
       <button className="btn-signout" onClick={signOut}><span className="ms">logout</span>Sign out</button>
     </div>

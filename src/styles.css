@@ -274,3 +274,56 @@ main { flex: 1; min-width: 0; display: flex; justify-content: center; }
 .btn-accent:disabled, .btn-outline:disabled { opacity: 0.6; cursor: default; }
 .reminder-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .reminder-actions .btn-outline { padding: 10px 14px; }
+.tile:disabled, .check:disabled, .goal-check:disabled { cursor: default; }
+
+/* ---------- Tutorial ---------- */
+.tour-scrim { position: fixed; inset: 0; background: rgba(42, 38, 34, 0.28); z-index: 50; display: flex; justify-content: center; }
+.tour { background: #fff; width: 100%; max-width: 460px; max-height: 88vh; overflow: auto; padding: 22px 22px calc(22px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 60px rgba(42, 38, 34, 0.25); animation: tour-in 0.2s ease; }
+@keyframes tour-in { from { transform: translateY(12px); opacity: 0; } }
+.tour-top { display: flex; align-items: center; justify-content: space-between; }
+.tour-icon { width: 52px; height: 52px; border-radius: 18px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; }
+.tour-icon .ms { font-size: 28px; }
+.tour-count { font-size: 12px; font-weight: 700; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+.tour-title { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin: 0; line-height: 1.2; }
+.tour-points { margin: 2px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; color: var(--label); line-height: 1.5; font-size: 15px; }
+.tour-points strong { color: var(--ink); }
+.tour-points li::marker { color: var(--accent); }
+.tour-dots { display: flex; gap: 6px; justify-content: center; margin: 8px 0 4px; }
+.tour-dots span { width: 7px; height: 7px; border-radius: 4px; background: var(--chip); transition: width 0.2s ease; }
+.tour-dots span.on { width: 22px; background: var(--accent); }
+.tour-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tour-actions .tour-next { flex: 1 1 160px; padding: 14px; font-size: 15px; }
+.tour-actions .tour-back { padding: 13px 16px; font-size: 14px; }
+
+/* ---------- Admin: customers ---------- */
+.users-tools { display: flex; gap: 8px; flex: 0 1 360px; min-width: 0; }
+.users-tools .search { flex: 1; }
+.csv { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; color: var(--ink); white-space: nowrap; }
+.customer-row { width: 100%; border: 0; border-top: 1px solid var(--soft); background: transparent; text-align: left; cursor: pointer; flex-wrap: nowrap; border-radius: 0; }
+.customer-row:hover { background: var(--bg); }
+.chev { color: var(--faint); font-size: 22px; }
+.ms.inline.small { font-size: 15px; color: var(--accent-text); }
+.notify-form { display: flex; flex-direction: column; gap: 12px; }
+.notify-form .field input, .notify-form .field textarea { background: var(--bg); padding: 12px 14px; font-size: 15px; font-weight: 500; }
+.field textarea { border: 1.5px solid var(--field); border-radius: 12px; outline: none; resize: vertical; font-family: inherit; color: var(--ink); line-height: 1.4; }
+.field textarea:focus { border-color: var(--accent); }
+.notify-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.notify-audience { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.notify-audience .ms { font-size: 18px; }
+.notify-foot .btn-accent { display: inline-flex; align-items: center; gap: 6px; }
+.notify-foot .btn-accent .ms { font-size: 18px; }
+.customer { display: flex; flex-direction: column; gap: 16px; }
+.customer .goals { margin: 0; }
+.back { align-self: flex-start; border: 0; background: transparent; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--muted); cursor: pointer; padding: 4px 0; }
+.back:hover { color: var(--ink); }
+.back .ms { font-size: 20px; }
+.customer-card { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.customer-head { display: flex; align-items: center; gap: 14px; }
+.user-avatar.big { width: 56px; height: 56px; font-size: 22px; }
+.customer-name { font-size: 20px; }
+a.user-meta { text-decoration: none; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.facts > div { background: var(--bg); border-radius: 14px; padding: 10px 12px; font-weight: 700; font-size: 14px; }
+.facts span { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.plan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.customer-goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
