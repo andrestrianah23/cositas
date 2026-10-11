@@ -12,6 +12,7 @@ import { SettingsView } from './components/SettingsView';
 import { TaskSheet, type Draft } from './components/TaskSheet';
 import { Nudge } from './components/Nudge';
 import { Tour } from './components/Tour';
+import { Landing } from './components/Landing';
 import { forgetDevice, usePwa } from './pwa';
 
 type View = 'day' | 'week' | 'month' | 'admin' | 'settings';
@@ -28,6 +29,15 @@ function useWidth() {
   return w;
 }
 
+type AuthMode = 'signin' | 'signup' | null;
+const hashMode = (): AuthMode => (location.hash === '#signin' ? 'signin' : location.hash === '#signup' ? 'signup' : null);
+
+function openAuth(m: 'signin' | 'signup', set: (m: AuthMode) => void) {
+  history.pushState(null, '', `#${m}`);
+  set(m);
+  window.scrollTo(0, 0);
+}
+
 export function App() {
   const w = useWidth();
   const isWide = w >= 900;
@@ -39,6 +49,13 @@ export function App() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [toast, setToast] = useState('');
   const [touring, setTouring] = useState(false);
+  // Signed-out visitors see the landing page; #signin / #signup open the form (so the back button returns home).
+  const [authMode, setAuthMode] = useState(hashMode);
+  useEffect(() => {
+    const onPop = () => setAuthMode(hashMode());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const today = ymd(new Date());
   const pwa = usePwa(!!me);
@@ -171,9 +188,25 @@ export function App() {
   }
 
   if (!me) {
+    // The installed app opens straight to sign-in: whoever installed it has already seen the pitch.
+    if (!authMode && !pwa.installed) {
+      return <Landing isWide={isWide} onStart={(m) => openAuth(m, setAuthMode)} />;
+    }
     return (
       <div className="shell">
-        <AuthScreen isWide={isWide} demo={demo} onAuthed={(u, isNew) => { enter(u); if (isNew) flash('Welcome to LockedIn'); }} />
+        <AuthScreen
+          key={authMode ?? 'signin'}
+          isWide={isWide}
+          demo={demo}
+          initialMode={authMode ?? 'signin'}
+          onBack={pwa.installed ? undefined : () => { history.replaceState(null, '', location.pathname); setAuthMode(null); window.scrollTo(0, 0); }}
+          onAuthed={(u, isNew) => {
+            history.replaceState(null, '', location.pathname);
+            setAuthMode(null);
+            enter(u);
+            if (isNew) flash('Welcome to LockedIn');
+          }}
+        />
       </div>
     );
   }

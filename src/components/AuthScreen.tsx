@@ -9,8 +9,17 @@ const HERO = [
   { icon: 'work', time: '9:00 AM · 2h', title: 'Deep work', h: 120, color: COLORS[2] },
 ];
 
-export function AuthScreen({ isWide, demo, onAuthed }: { isWide: boolean; demo: boolean; onAuthed: (u: User, isNew: boolean) => void }) {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+interface Props {
+  isWide: boolean;
+  demo: boolean;
+  initialMode?: 'signin' | 'signup';
+  /** Returns to the landing page; omitted inside the installed app, which has no landing page. */
+  onBack?: () => void;
+  onAuthed: (u: User, isNew: boolean) => void;
+}
+
+export function AuthScreen({ isWide, demo, initialMode = 'signin', onBack, onAuthed }: Props) {
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -70,6 +79,9 @@ export function AuthScreen({ isWide, demo, onAuthed }: { isWide: boolean; demo: 
       )}
       <div className="auth-panel">
         <form className="auth-form" onSubmit={submit} noValidate>
+          {onBack && (
+            <button type="button" className="back" onClick={onBack}><span className="ms">arrow_back</span>Back to home</button>
+          )}
           {!isWide && (
             <div className="brand" style={{ marginBottom: 12 }}>
               <img src="/logo-mark.png" alt="LockedIn" width={44} height={44} style={{ borderRadius: 12 }} />

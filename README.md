@@ -2,6 +2,7 @@
 
 A daily, weekly and monthly planner you can install as an app (PWA). Anyone can create a free account, and administrators get a panel to manage users.
 
+- **Landing page**: visitors see an interactive landing page before signing in. It has a hero phone you can tick tasks on, a live demo running the real Day, Week and Month screens on sample data, and features, how it works, reminders and FAQ sections. The installed app skips it and opens straight to sign-in.
 - **Day**: a timeline where each task's block height matches how long it takes. Tick tasks off, and gaps of 30 minutes or more show as free time.
 - **Week**: a 7-day grid of tasks, plus a list of weekly goals.
 - **Month**: a calendar with a colored dot per task, plus a list of monthly goals.
