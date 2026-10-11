@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['push-sw.js', 'logo-mark.png', 'icon-192.png', 'icon-512.png', 'icon-maskable.png'],
+      includeAssets: ['push-sw.js', 'logo-mark.png', 'app-icon-192.png', 'app-icon-512.png', 'app-icon-maskable.png'],
       manifest: {
         name: 'LockedIn',
         short_name: 'LockedIn',
@@ -21,9 +21,9 @@ export default defineConfig({
         background_color: '#faf8f5',
         theme_color: '#faf8f5',
         icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: 'icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'app-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'app-icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

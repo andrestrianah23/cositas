@@ -9,8 +9,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'LockedIn', {
       body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: '/app-icon-192.png',
+      badge: '/app-icon-192.png',
       tag: data.tag,
       data: { url: data.url || '/' },
     }),

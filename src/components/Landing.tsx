@@ -143,7 +143,7 @@ function HeroPhone() {
       <div className={`lp-banner${banner !== null ? ' show' : ''}`} aria-live="polite">
         {banner !== null && (
           <>
-            <img src="/icon-192.png" alt="" />
+            <img src="/app-icon-192.png" alt="" />
             <div><strong>{HERO_TASKS[banner].title}</strong><span>Starting now · {HERO_TASKS[banner].t}</span></div>
           </>
         )}
@@ -476,7 +476,7 @@ export function Landing({ isWide, onStart }: { isWide: boolean; onStart: Start }
               ['Deep work', 'Starting now · 9:00 – 11:00 AM'],
             ].map(([t, b], i) => (
               <div className="lp-notif" key={t} style={{ '--d': `${300 + i * 450}ms` } as CSSProperties}>
-                <img src="/icon-192.png" alt="" />
+                <img src="/app-icon-192.png" alt="" />
                 <div><strong>{t}</strong><span>{b}</span></div>
                 <em>{i === 0 ? '14m ago' : i === 1 ? 'now' : ''}</em>
               </div>
