@@ -46,8 +46,8 @@ export function AuthScreen({ isWide, demo, onAuthed }: { isWide: boolean; demo: 
       {isWide && (
         <div className="auth-hero">
           <div className="brand">
-            <img src="/logo-mark.png" alt="Lockedin" width={40} height={40} style={{ borderRadius: 11 }} />
-            <div className="brand-name" style={{ fontSize: 22 }}>Lockedin</div>
+            <img src="/logo-mark.png" alt="LockedIn" width={40} height={40} style={{ borderRadius: 11 }} />
+            <div className="brand-name" style={{ fontSize: 22 }}>LockedIn</div>
           </div>
           <div className="hero-list">
             {HERO.map((r, i) => (
@@ -72,8 +72,8 @@ export function AuthScreen({ isWide, demo, onAuthed }: { isWide: boolean; demo: 
         <form className="auth-form" onSubmit={submit} noValidate>
           {!isWide && (
             <div className="brand" style={{ marginBottom: 12 }}>
-              <img src="/logo-mark.png" alt="Lockedin" width={44} height={44} style={{ borderRadius: 12 }} />
-              <div className="brand-name" style={{ fontSize: 24 }}>Lockedin</div>
+              <img src="/logo-mark.png" alt="LockedIn" width={44} height={44} style={{ borderRadius: 12 }} />
+              <div className="brand-name" style={{ fontSize: 24 }}>LockedIn</div>
             </div>
           )}
           <div>

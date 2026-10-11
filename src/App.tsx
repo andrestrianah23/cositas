@@ -167,13 +167,13 @@ export function App() {
   };
 
   if (me === undefined) {
-    return <div className="shell loading"><img src="/logo-mark.png" alt="Loading Lockedin" /></div>;
+    return <div className="shell loading"><img src="/logo-mark.png" alt="Loading LockedIn" /></div>;
   }
 
   if (!me) {
     return (
       <div className="shell">
-        <AuthScreen isWide={isWide} demo={demo} onAuthed={(u, isNew) => { enter(u); if (isNew) flash('Welcome to Lockedin'); }} />
+        <AuthScreen isWide={isWide} demo={demo} onAuthed={(u, isNew) => { enter(u); if (isNew) flash('Welcome to LockedIn'); }} />
       </div>
     );
   }
@@ -207,8 +207,8 @@ export function App() {
         {isWide && (
           <aside className="sidebar">
             <div className="brand">
-              <img src="/logo-mark.png" alt="Lockedin" width={36} height={36} style={{ borderRadius: 10 }} />
-              <div className="brand-name" style={{ fontSize: 20 }}>Lockedin</div>
+              <img src="/logo-mark.png" alt="LockedIn" width={36} height={36} style={{ borderRadius: 10 }} />
+              <div className="brand-name" style={{ fontSize: 20 }}>LockedIn</div>
             </div>
             <nav className="side-nav">
               {nav.map(([k, label, icon]) => (

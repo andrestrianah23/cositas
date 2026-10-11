@@ -1,4 +1,4 @@
-# Lockedin
+# LockedIn
 
 A daily, weekly and monthly planner you can install as an app (PWA). Anyone can create a free account, and administrators get a panel to manage users.
 
@@ -28,12 +28,12 @@ Fonts are self-hosted: Manrope and JetBrains Mono come from npm, and the Materia
 1. Push this repository to GitHub.
 2. In Railway, choose **New Project → Deploy from GitHub repo** and pick the repository. Railway reads `railway.json`, which builds with `npm run build`, starts with `npm start` and health-checks `/api/health`.
 3. In the same project, click **+ New → Database → PostgreSQL**.
-4. Open the Lockedin service → **Variables** and add:
+4. Open the LockedIn service → **Variables** and add:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `ADMIN_EMAIL`: your email. This account is created as an administrator on startup (or promoted, if it already exists).
    - `ADMIN_PASSWORD`: a strong password for that account. It is only used the first time the account is created. Changing the variable later does not change the password.
    - `ADMIN_NAME` (optional): the display name for that account.
-5. Open **Settings → Networking → Generate Domain** to get a public HTTPS address. Open it on your phone and use **Add to Home Screen** to install Lockedin.
+5. Open **Settings → Networking → Generate Domain** to get a public HTTPS address. Open it on your phone and use **Add to Home Screen** to install LockedIn.
 
 Push notifications need no extra setup: the server generates its signing keys (VAPID) on first start and keeps them in the database. To manage the keys yourself instead, set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate them with `npx web-push generate-vapid-keys`). Changing the keys later turns reminders off on every device until people turn them back on.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Downloads a Material Symbols Rounded subset (filled, weight 500) containing only the icons Lockedin uses.
+# Downloads a Material Symbols Rounded subset (filled, weight 500) containing only the icons LockedIn uses.
 # Re-run after adding an icon anywhere in the app: add it to ICONS below, then commit src/fonts/material-symbols.woff2.
 set -euo pipefail
 cd "$(dirname "$0")/.."

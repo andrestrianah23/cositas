@@ -14,9 +14,9 @@ const steps = (name: string, admin: boolean): Step[] => [
   {
     view: 'day',
     icon: 'waving_hand',
-    title: `Welcome to Lockedin, ${name}`,
+    title: `Welcome to LockedIn, ${name}`,
     points: [
-      'Lockedin keeps your day, your week and your month in one calm place.',
+      'LockedIn keeps your day, your week and your month in one calm place.',
       'This short tour shows you every tool. It takes about a minute, and you can replay it anytime from Settings.',
     ],
   },
@@ -74,7 +74,7 @@ const steps = (name: string, admin: boolean): Step[] => [
     icon: 'notifications_active',
     title: 'Install it and get reminders',
     points: [
-      <><strong>Install</strong> Lockedin on your home screen so it opens like a regular app. On iPhone: Share, then “Add to Home Screen”.</>,
+      <><strong>Install</strong> LockedIn on your home screen so it opens like a regular app. On iPhone: Share, then “Add to Home Screen”.</>,
       <>Turn on <strong>reminders</strong> and you’ll get a notification the moment each task starts, even when the app is closed.</>,
       'The card at the top of your planner walks you through both.',
     ],

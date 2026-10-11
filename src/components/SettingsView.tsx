@@ -15,9 +15,9 @@ interface Props {
 const PUSH_TEXT: Record<Pwa['push'], string> = {
   on: 'On for this device. You’ll get a notification when each task starts.',
   off: 'Off for this device.',
-  default: 'Get a notification the moment each task starts, even when Lockedin is closed.',
-  denied: 'Notifications are blocked for Lockedin. Allow them in your browser or phone settings (Site settings → Notifications), then come back here.',
-  'needs-install': 'On iPhone and iPad, reminders work once Lockedin is on your home screen. Install it first (see above), then open it from the home screen.',
+  default: 'Get a notification the moment each task starts, even when LockedIn is closed.',
+  denied: 'Notifications are blocked for LockedIn. Allow them in your browser or phone settings (Site settings → Notifications), then come back here.',
+  'needs-install': 'On iPhone and iPad, reminders work once LockedIn is on your home screen. Install it first (see above), then open it from the home screen.',
   unsupported: 'This browser can’t show notifications. Try Chrome, Edge, Firefox or Safari.',
 };
 
@@ -56,12 +56,12 @@ export function SettingsView({ me, onUser, flash, pwa, replayTour, signOut }: Pr
   };
 
   const installText = pwa.installed
-    ? 'Lockedin is installed on this device.'
+    ? 'LockedIn is installed on this device.'
     : pwa.method === 'prompt'
-      ? 'Add Lockedin to your home screen for one-tap access and reminders.'
+      ? 'Add LockedIn to your home screen for one-tap access and reminders.'
       : pwa.method === 'ios'
         ? 'In Safari, tap Share, then “Add to Home Screen”.'
-        : 'Use your browser’s “Install app” or “Add to Home Screen” option to keep Lockedin one tap away.';
+        : 'Use your browser’s “Install app” or “Add to Home Screen” option to keep LockedIn one tap away.';
 
   return (
     <div className="settings">
@@ -75,11 +75,11 @@ export function SettingsView({ me, onUser, flash, pwa, replayTour, signOut }: Pr
       </div>
       <div className="card install">
         <div className="install-text">
-          <div className="card-title">Install Lockedin</div>
+          <div className="card-title">Install LockedIn</div>
           <div className="install-sub">{installText}</div>
         </div>
         {!pwa.installed && pwa.method === 'prompt' && (
-          <button className="btn-accent" onClick={async () => { if (await pwa.install()) flash('Lockedin installed'); }}>Install app</button>
+          <button className="btn-accent" onClick={async () => { if (await pwa.install()) flash('LockedIn installed'); }}>Install app</button>
         )}
       </div>
       <div className="card install">
@@ -117,7 +117,7 @@ export function SettingsView({ me, onUser, flash, pwa, replayTour, signOut }: Pr
       <div className="card install">
         <div className="install-text">
           <div className="card-title">Tutorial</div>
-          <div className="install-sub">A one-minute walk through every tool in Lockedin.</div>
+          <div className="install-sub">A one-minute walk through every tool in LockedIn.</div>
         </div>
         <button className="btn-outline" onClick={replayTour}><span className="ms inline">school</span> Replay tutorial</button>
       </div>

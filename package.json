@@ -2,7 +2,7 @@
   "name": "lockedin",
   "version": "1.0.0",
   "private": true,
-  "description": "Lockedin — daily, weekly and monthly planner PWA",
+  "description": "LockedIn — daily, weekly and monthly planner PWA",
   "type": "module",
   "engines": {
     "node": ">=20"

@@ -142,7 +142,7 @@ export function pushRoutes(api: Router, db: Db) {
   });
 
   api.post('/push/test', requireUser, async (req, res) => {
-    const sent = await sendToUser(db, req.user!.id, { title: 'Reminders are on', body: 'Lockedin will nudge you when each task starts.', url: '/', tag: 'test' });
+    const sent = await sendToUser(db, req.user!.id, { title: 'Reminders are on', body: 'LockedIn will nudge you when each task starts.', url: '/', tag: 'test' });
     if (!sent) return res.status(400).json({ error: 'No device with reminders turned on.' });
     res.json({ sent });
   });

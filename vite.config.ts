@@ -12,8 +12,8 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ['push-sw.js', 'logo-mark.png', 'icon-192.png', 'icon-512.png', 'icon-maskable.png'],
       manifest: {
-        name: 'Lockedin',
-        short_name: 'Lockedin',
+        name: 'LockedIn',
+        short_name: 'LockedIn',
         description: 'Daily, weekly and monthly planner',
         start_url: '/',
         scope: '/',

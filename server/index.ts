@@ -35,5 +35,5 @@ if (fs.existsSync(path.join(clientDir, 'index.html'))) {
 }
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => console.log(`Lockedin listening on :${port}`));
+app.listen(port, () => console.log(`LockedIn listening on :${port}`));
 startReminderLoop(db);

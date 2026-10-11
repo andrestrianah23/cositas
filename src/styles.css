@@ -3,7 +3,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: block;
-  /* Subset of the icons Lockedin uses — regenerate with scripts/fetch-icon-font.sh. */
+  /* Subset of the icons LockedIn uses — regenerate with scripts/fetch-icon-font.sh. */
   src: url('./fonts/material-symbols.woff2') format('woff2');
 }
 
