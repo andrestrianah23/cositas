@@ -31,6 +31,9 @@ function client() {
 
 const timed = { kind: 'timed', title: 'Yoga', date: '2026-09-01', start: '07:15', dur: 30, color: 1, icon: 'self_improvement', repeat: 'daily' };
 
+// The suite signs in far more often than the production limit allows.
+process.env.AUTH_RATE_LIMIT = '1000';
+
 before(async () => {
   await db.query('DROP TABLE IF EXISTS push_log, push_subscriptions, app_settings, tasks, sessions, users CASCADE');
   await migrate(db);
@@ -112,7 +115,7 @@ describe('tasks', () => {
   test('validates timed task fields', async () => {
     const a = client();
     await a('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
-    for (const bad of [{ title: '  ' }, { date: '2026-02-30' }, { start: '25:00' }, { dur: 7 }, { color: 9 }, { icon: 'rocket' }, { repeat: 'yearly' }]) {
+    for (const bad of [{ title: '  ' }, { date: '2026-02-30' }, { start: '25:00' }, { dur: 0 }, { dur: 1441 }, { dur: 2.5 }, { color: 9 }, { icon: 'rocket' }, { repeat: 'yearly' }]) {
       assert.equal((await a('POST', '/api/tasks', { ...timed, ...bad })).status, 400, JSON.stringify(bad));
     }
   });
@@ -124,7 +127,8 @@ describe('tasks', () => {
     assert.equal(g.kind, 'month');
     assert.equal(g.start, null);
     assert.deepEqual((await a('POST', `/api/tasks/${g.id}/toggle`, { key: '2026-09' })).body.task.done, { '2026-09': true });
-    assert.equal((await a('PATCH', `/api/tasks/${g.id}`, { title: 'x' })).status, 400);
+    assert.equal((await a('PATCH', `/api/tasks/${g.id}`, { title: 'Pay rent early' })).body.task.title, 'Pay rent early');
+    assert.equal((await a('PATCH', `/api/tasks/${g.id}`, { start: '09:00' })).body.task.start, null);
     assert.equal((await a('POST', `/api/tasks/${g.id}/toggle`, { key: 'bogus' })).status, 400);
   });
 
@@ -270,3 +274,104 @@ async function signInCookie(email: string, password: string) {
   const res = await fetch(base + '/api/auth/signin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
   return (res.headers.get('set-cookie') ?? '').split(';')[0];
 }
+
+describe('end times, linked goals and password', () => {
+  test('tasks take any length but must end by midnight', async () => {
+    const a = client();
+    await a('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    assert.equal((await a('POST', '/api/tasks', { ...timed, dur: 7 })).status, 201);
+    const late = await a('POST', '/api/tasks', { ...timed, title: 'Late', start: '22:00', dur: 120 });
+    assert.equal(late.status, 201, 'ending exactly at midnight is fine');
+    const over = await a('POST', '/api/tasks', { ...timed, title: 'Night shift', start: '22:00', dur: 121 });
+    assert.equal(over.status, 400);
+    assert.match(over.body.error, /end by midnight/);
+    // Moving a task later can't push it past midnight either.
+    assert.equal((await a('PATCH', `/api/tasks/${late.body.task.id}`, { start: '22:30' })).status, 400);
+    assert.equal((await a('PATCH', `/api/tasks/${late.body.task.id}`, { start: '22:30', dur: 90 })).status, 200);
+    assert.equal((await a('POST', '/api/tasks', { ...timed, start: '00:00', dur: 1440 })).status, 201);
+    await db.query("DELETE FROM tasks WHERE title IN ('Late', 'Yoga') AND user_id = (SELECT id FROM users WHERE email = 'ana@example.com')");
+  });
+
+  test('goals carry a target, repeat and links to the owner’s own tasks', async () => {
+    const a = client(), b = client();
+    await a('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    await b('POST', '/api/auth/signin', { email: 'new@example.com', password: 'new-pass' });
+    const gym = (await a('POST', '/api/tasks', { ...timed, title: 'Gym', start: '18:00', dur: 60 })).body.task;
+    const theirs = (await b('POST', '/api/tasks', { ...timed, title: 'Theirs' })).body.task;
+
+    const goal = await a('POST', '/api/tasks', { kind: 'week', title: 'Gym 4x', date: '2026-09-28', repeat: 'weekly', target: 4, links: [gym.id] });
+    assert.equal(goal.status, 201);
+    assert.equal(goal.body.task.target, 4);
+    assert.deepEqual(goal.body.task.links, [gym.id]);
+    assert.equal(goal.body.task.repeat, 'weekly');
+
+    assert.equal((await a('POST', '/api/tasks', { kind: 'week', title: 'x', date: '2026-09-28', links: [theirs.id] })).status, 400);
+    assert.equal((await a('POST', '/api/tasks', { kind: 'week', title: 'x', date: '2026-09-28', repeat: 'monthly' })).status, 400);
+    assert.equal((await a('POST', '/api/tasks', { kind: 'week', title: 'x', date: '2026-09-28', target: 0 })).status, 400);
+    // A weekly goal can't count another weekly goal; a monthly one can.
+    assert.equal((await a('POST', '/api/tasks', { kind: 'week', title: 'x', date: '2026-09-28', links: [goal.body.task.id] })).status, 400);
+    const month = await a('POST', '/api/tasks', { kind: 'month', title: 'Gym every week', date: '2026-10-01', target: 4, links: [goal.body.task.id] });
+    assert.equal(month.status, 201);
+
+    const edited = await a('PATCH', `/api/tasks/${goal.body.task.id}`, { title: 'Gym 3x', target: 3 });
+    assert.equal(edited.body.task.title, 'Gym 3x');
+    assert.equal(edited.body.task.target, 3);
+    assert.equal((await a('PATCH', `/api/tasks/${goal.body.task.id}`, { links: [goal.body.task.id] })).status, 400);
+
+    // Deleting a linked task removes it from the goal.
+    await a('DELETE', `/api/tasks/${gym.id}`);
+    const after = (await a('GET', '/api/tasks')).body.tasks.find((t: { id: string }) => t.id === goal.body.task.id);
+    assert.deepEqual(after.links, []);
+    await db.query('DELETE FROM tasks WHERE id = ANY($1)', [[goal.body.task.id, month.body.task.id, theirs.id]]);
+  });
+
+  test('changing the password checks the old one and signs out other devices', async () => {
+    const here = client(), there = client();
+    await here('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    await there('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    assert.equal((await here('POST', '/api/me/password', { current: 'wrong', next: 'brand-new' })).body.error, 'Your current password is incorrect.');
+    assert.equal((await here('POST', '/api/me/password', { current: 'ana-pass', next: '123' })).status, 400);
+    assert.equal((await here('POST', '/api/me/password', { current: 'ana-pass', next: 'brand-new' })).status, 200);
+    assert.equal((await here('GET', '/api/me')).body.user.email, 'ana@example.com');
+    assert.equal((await there('GET', '/api/me')).body.user, null);
+    assert.equal((await client()('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' })).status, 400);
+    assert.equal((await client()('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'brand-new' })).status, 200);
+    await here('POST', '/api/me/password', { current: 'brand-new', next: 'ana-pass' });
+  });
+
+  test('evening check-in: two hours after the last task, once, only when something is unticked', async () => {
+    const a = client();
+    await a('POST', '/api/auth/signin', { email: 'ana@example.com', password: 'ana-pass' });
+    await db.query("DELETE FROM tasks WHERE user_id = (SELECT id FROM users WHERE email = 'ana@example.com')");
+    await a('POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.example.com/send/9', keys: { p256dh: 'k', auth: 'a' } }, tz: 'UTC' });
+    const t1 = (await a('POST', '/api/tasks', { ...timed, title: 'Gym', start: '18:00', dur: 60, date: '2026-10-01' })).body.task;
+    await a('POST', '/api/tasks', { ...timed, title: 'Read', start: '21:00', dur: 30, date: '2026-10-01' });
+    await a('POST', `/api/tasks/${t1.id}/toggle`, { key: '2026-10-05' });
+
+    const sent: { title: string; body: string; url?: string }[] = [];
+    const fake = async (_db: unknown, _u: string, p: { title: string; body: string; url?: string }) => (sent.push(p), 1);
+    const checkins = () => sent.filter((p) => p.title.startsWith('Quick check-in'));
+
+    await sendDueReminders(db, new Date('2026-10-05T23:20:00Z'), fake); // last task ends 21:30, so not yet
+    assert.equal(checkins().length, 0);
+    await sendDueReminders(db, new Date('2026-10-05T23:31:00Z'), fake);
+    await sendDueReminders(db, new Date('2026-10-05T23:45:00Z'), fake);
+    assert.equal(checkins().length, 1);
+    assert.equal(checkins()[0].title, 'Quick check-in: 1 task to tick');
+    assert.match(checkins()[0].body, /Did you get to Read\?/);
+    assert.equal(checkins()[0].url, '/?day=2026-10-05');
+
+    // A day with everything ticked gets no check-in.
+    for (const t of (await a('GET', '/api/tasks')).body.tasks) await a('POST', `/api/tasks/${t.id}/toggle`, { key: '2026-10-06' });
+    await sendDueReminders(db, new Date('2026-10-06T23:35:00Z'), fake);
+    assert.equal(checkins().length, 1);
+
+    // A late last task puts the check-in after midnight, still about the right day.
+    await a('POST', '/api/tasks', { ...timed, title: 'Night walk', start: '23:00', dur: 30, date: '2026-10-07', repeat: 'none' });
+    await sendDueReminders(db, new Date('2026-10-08T01:31:00Z'), fake);
+    assert.equal(checkins().length, 2);
+    assert.equal(checkins()[1].url, '/?day=2026-10-07');
+    assert.match(checkins()[1].body, /Gym, Read and Night walk/);
+    await db.query("DELETE FROM push_subscriptions WHERE endpoint = 'https://push.example.com/send/9'");
+  });
+});

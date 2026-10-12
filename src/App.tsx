@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, setUnauthorizedHandler } from './api';
-import { addDays, DOWF, keyFor, MONTHS, occurs, parse, toMin, weekStart, ymd } from '../shared/dates';
-import type { Task, User } from '../shared/types';
+import { addDays, DOWF, isYmd, keyFor, MONTHS, occurs, parse, toMin, weekStart, ymd } from '../shared/dates';
+import { goalInPeriod } from '../shared/goals';
+import type { GoalInput, Task, User } from '../shared/types';
 import { AuthScreen } from './components/AuthScreen';
 import { DayView } from './components/DayView';
 import { WeekView } from './components/WeekView';
@@ -12,6 +13,7 @@ import { SettingsView } from './components/SettingsView';
 import { TaskSheet, type Draft } from './components/TaskSheet';
 import { Nudge } from './components/Nudge';
 import { Tour } from './components/Tour';
+import { GoalSheet } from './components/GoalSheet';
 import { Landing } from './components/Landing';
 import { forgetDevice, usePwa } from './pwa';
 
@@ -30,6 +32,14 @@ function useWidth() {
 }
 
 type AuthMode = 'signin' | 'signup' | null;
+
+/** Reminders open /?day=YYYY-MM-DD; show that day, then tidy the address bar. */
+function openDayFromUrl(setSel: (d: string) => void) {
+  const params = new URLSearchParams(location.search);
+  const day = params.get('day');
+  if (isYmd(day)) setSel(day);
+  if (params.has('day')) history.replaceState(null, '', location.pathname + location.hash);
+}
 const hashMode = (): AuthMode => (location.hash === '#signin' ? 'signin' : location.hash === '#signup' ? 'signup' : null);
 
 function openAuth(m: 'signin' | 'signup', set: (m: AuthMode) => void) {
@@ -47,6 +57,7 @@ export function App() {
   const [view, setView] = useState<View>('day');
   const [sel, setSel] = useState(() => ymd(new Date()));
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [goalDraft, setGoalDraft] = useState<Task | null>(null);
   const [toast, setToast] = useState('');
   const [touring, setTouring] = useState(false);
   // Signed-out visitors see the landing page; #signin / #signup open the form (so the back button returns home).
@@ -57,6 +68,21 @@ export function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Tapping a reminder while the app is already open: jump to that day.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type !== 'open' || typeof e.data.url !== 'string') return;
+      const day = new URL(e.data.url, location.origin).searchParams.get('day');
+      if (isYmd(day)) {
+        setSel(day);
+        setView('day');
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, []);
   const today = ymd(new Date());
   const pwa = usePwa(!!me);
 
@@ -70,6 +96,7 @@ export function App() {
     setMe(null);
     setTasks([]);
     setDraft(null);
+    setGoalDraft(null);
     setTouring(false);
     setView('day');
   }, []);
@@ -78,6 +105,7 @@ export function App() {
     setMe(u);
     setView('day');
     setSel(ymd(new Date()));
+    openDayFromUrl(setSel);
     // First sign-in on this account: walk them through the app.
     setTouring(!u.onboarded);
     try {
@@ -231,7 +259,7 @@ export function App() {
     setSel(ds);
     setView('day');
   };
-  const goalList = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && keyFor(t, t.date) === key);
+  const goalList = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && goalInPeriod(t, key));
   const weekKey = ymd(ws), monthKey = sel.slice(0, 7);
 
   return (
@@ -294,14 +322,14 @@ export function App() {
             {v === 'week' && (
               <>
                 <WeekView sel={sel} today={today} isWide={isWide} onDay={onDay} pickDay={pickDay} onEdit={(t, ds) => { setSel(ds); openSheet(t); }} />
-                <Goals title="Weekly goals" placeholder="Add a goal for this week" goals={goalList('week', weekKey)} doneKey={weekKey} onAdd={addGoal('week')} onToggle={(g) => toggle(g, g.date)} onDelete={removeTask} />
+                <Goals title="Weekly goals" placeholder="Add a goal for this week" goals={goalList('week', weekKey)} periodKey={weekKey} tasks={tasks} onAdd={addGoal('week')} onToggle={(g) => toggle(g, sel)} onEdit={setGoalDraft} onDelete={removeTask} />
               </>
             )}
 
             {v === 'month' && (
               <>
                 <MonthView sel={sel} today={today} isWide={isWide} onDay={onDay} pickDay={pickDay} />
-                <Goals title="Monthly goals" placeholder="Add a goal for this month" goals={goalList('month', monthKey)} doneKey={monthKey} onAdd={addGoal('month')} onToggle={(g) => toggle(g, g.date)} onDelete={removeTask} />
+                <Goals title="Monthly goals" placeholder="Add a goal for this month" goals={goalList('month', monthKey)} periodKey={monthKey} tasks={tasks} onAdd={addGoal('month')} onToggle={(g) => toggle(g, sel)} onEdit={setGoalDraft} onDelete={removeTask} />
               </>
             )}
 
@@ -347,6 +375,32 @@ export function App() {
               setView('day');
               if (addTask) openSheet(null);
               if (!me.onboarded) api.finishTutorial().then((r) => setMe(r.user)).catch(() => {});
+            }}
+          />
+        )}
+
+        {goalDraft && (
+          <GoalSheet
+            key={goalDraft.id}
+            goal={goalDraft}
+            tasks={tasks}
+            isWide={isWide}
+            flash={flash}
+            onClose={() => setGoalDraft(null)}
+            onSave={async (input: GoalInput) => {
+              try {
+                replace((await api.updateGoal(goalDraft.id, input)).task);
+                setGoalDraft(null);
+                flash('Goal saved');
+              } catch (e) {
+                flash((e as Error).message);
+              }
+            }}
+            onDelete={async () => {
+              if (await removeTask(goalDraft)) {
+                setGoalDraft(null);
+                flash('Goal deleted');
+              }
             }}
           />
         )}

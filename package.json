@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
     "build": "npm run typecheck && vite build && esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
     "start": "node dist/server.js",
-    "test": "node --import tsx --test server/*.test.ts"
+    "test": "node --import tsx --test server/*.test.ts shared/*.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

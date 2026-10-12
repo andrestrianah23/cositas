@@ -48,6 +48,16 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS tasks_user_id_idx ON tasks(user_id);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target integer;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS links jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- One evening check-in per user per day.
+CREATE TABLE IF NOT EXISTS checkin_log (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day text NOT NULL,
+  sent_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, day)
+);
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key text PRIMARY KEY,
@@ -99,5 +109,5 @@ export const toUser = (r: UserRow): User => ({
   onboarded: r.onboarded_at !== null,
 });
 
-export const TASK_COLS = 'id, kind, title, date, start, dur, color, icon, repeat, done';
-export const toTask = (r: Task): Task => ({ ...r, done: r.done ?? {} });
+export const TASK_COLS = 'id, kind, title, date, start, dur, color, icon, repeat, target, links, done';
+export const toTask = (r: Task): Task => ({ ...r, done: r.done ?? {}, links: r.links ?? [] });

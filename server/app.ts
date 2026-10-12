@@ -4,8 +4,8 @@ import { rateLimit } from 'express-rate-limit';
 import { endSession, hashPassword, loadUser, requireAdmin, requireUser, startSession, verifyPassword } from './auth';
 import { TASK_COLS, toTask, toUser, type Db, type UserRow } from './db';
 import { pushRoutes, sendToUser } from './push';
-import { isDoneKey, isHm, isYmd } from '../shared/dates';
-import { COLOR_COUNT, DURATIONS, ICONS, REPEATS, type AdminStats, type AdminUser, type NotifyResult, type Task, type TimedTaskInput } from '../shared/types';
+import { isDoneKey, isHm, isYmd, toMin } from '../shared/dates';
+import { COLOR_COUNT, ICONS, MAX_DUR, MAX_LINKS, MAX_TARGET, REPEATS, type AdminStats, type GoalInput, type AdminUser, type NotifyResult, type Task, type TimedTaskInput } from '../shared/types';
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -34,7 +34,7 @@ function timedInput(b: Record<string, unknown>, partial: boolean): Partial<Timed
     out.start = b.start;
   }
   if (has('dur')) {
-    if (!DURATIONS.includes(b.dur as number)) throw bad('Invalid duration');
+    if (!Number.isInteger(b.dur) || (b.dur as number) < 1 || (b.dur as number) > MAX_DUR) throw bad('End time must be after the start time');
     out.dur = b.dur as number;
   }
   if (has('color')) {
@@ -48,6 +48,36 @@ function timedInput(b: Record<string, unknown>, partial: boolean): Partial<Timed
   if (has('repeat')) {
     if (!REPEATS.includes(b.repeat as TimedTaskInput['repeat'])) throw bad('Invalid repeat');
     out.repeat = b.repeat as TimedTaskInput['repeat'];
+  }
+  return out;
+}
+
+/** A task ends by midnight; anything longer is split into a task for the next day. */
+function sameDay(start: string, dur: number) {
+  if (toMin(start) + dur > 1440) throw bad('A task has to end by midnight. For something that runs later, add a second task for the next day.');
+}
+
+function goalInput(kind: 'week' | 'month', b: Record<string, unknown>, partial: boolean): Partial<GoalInput> {
+  const out: Partial<GoalInput> = {};
+  const has = (k: string) => !partial || k in b;
+  if (has('title')) {
+    out.title = str(b.title, 200);
+    if (!out.title) throw bad('Goal cannot be empty');
+  }
+  if (has('repeat')) {
+    const r = b.repeat ?? 'none';
+    if (r !== 'none' && r !== (kind === 'week' ? 'weekly' : 'monthly')) throw bad('Invalid repeat');
+    out.repeat = r as GoalInput['repeat'];
+  }
+  if (has('target')) {
+    const t = b.target ?? null;
+    if (t !== null && (!Number.isInteger(t) || (t as number) < 1 || (t as number) > MAX_TARGET)) throw bad(`Target must be between 1 and ${MAX_TARGET}`);
+    out.target = t as number | null;
+  }
+  if (has('links')) {
+    const l = b.links ?? [];
+    if (!Array.isArray(l) || l.length > MAX_LINKS || !l.every((x) => typeof x === 'string' && UUID_RE.test(x))) throw bad('Invalid links');
+    out.links = [...new Set(l as string[])];
   }
   return out;
 }
@@ -94,7 +124,7 @@ export function createApp(db: Db) {
   });
 
   // ---------- Auth ----------
-  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many attempts. Try again in a few minutes.' } });
+  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: Number(process.env.AUTH_RATE_LIMIT) || 30, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many attempts. Try again in a few minutes.' } });
 
   api.post('/auth/signup', authLimiter, async (req, res) => {
     const name = str(req.body?.name, 80);
@@ -143,6 +173,19 @@ export function createApp(db: Db) {
     res.json({ user: toUser(rows[0]) });
   });
 
+  api.post('/me/password', requireUser, authLimiter, async (req, res) => {
+    const current = typeof req.body?.current === 'string' ? req.body.current : '';
+    const next = typeof req.body?.next === 'string' ? req.body.next : '';
+    if (next.length < 6) throw bad('New password must be at least 6 characters.');
+    if (next.length > 72) throw bad('New password must be at most 72 characters.');
+    const { rows } = await db.query<UserRow>('SELECT * FROM users WHERE id = $1', [req.user!.id]);
+    if (!(await verifyPassword(current, rows[0]?.password_hash))) throw bad('Your current password is incorrect.');
+    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(next), req.user!.id]);
+    // Sign out every other device; this one stays signed in.
+    await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [req.user!.id, req.sessionHash]);
+    res.json({ ok: true });
+  });
+
   /** Marks the first-login tutorial as finished (or skipped) so it doesn't show again on any device. */
   api.post('/me/onboarded', requireUser, async (req, res) => {
     const { rows } = await db.query<UserRow>('UPDATE users SET onboarded_at = COALESCE(onboarded_at, now()) WHERE id = $1 RETURNING *', [req.user!.id]);
@@ -158,6 +201,17 @@ export function createApp(db: Db) {
     return rows[0];
   };
 
+  const checkLinks = async (userId: string, kind: 'week' | 'month', links: string[] | undefined, self?: string) => {
+    if (!links?.length) return;
+    if (self && links.includes(self)) throw bad('A goal cannot count itself');
+    const allowed = kind === 'month' ? ['timed', 'week'] : ['timed'];
+    const { rows } = await db.query<{ n: string }>(
+      'SELECT count(*) AS n FROM tasks WHERE user_id = $1 AND id = ANY($2::uuid[]) AND kind = ANY($3::text[])',
+      [userId, links, allowed],
+    );
+    if (Number(rows[0].n) !== links.length) throw bad('Some linked tasks no longer exist');
+  };
+
   api.get('/tasks', requireUser, async (req, res) => {
     // Loading the plan means they opened the app: record it for the admin's "last active" (at most every 5 minutes).
     await db.query(`UPDATE users SET last_active_at = now() WHERE id = $1 AND (last_active_at IS NULL OR last_active_at < now() - interval '5 minutes')`, [req.user!.id]);
@@ -169,15 +223,16 @@ export function createApp(db: Db) {
     const kind = req.body?.kind;
     let row: Task;
     if (kind === 'week' || kind === 'month') {
-      const title = str(req.body?.title, 200);
-      if (!title) throw bad('Goal cannot be empty');
+      const g = goalInput(kind, req.body ?? {}, false) as GoalInput;
       if (!isYmd(req.body?.date)) throw bad('Invalid date');
+      await checkLinks(req.user!.id, kind, g.links);
       ({ rows: [row] } = await db.query<Task>(
-        `INSERT INTO tasks (user_id, kind, title, date) VALUES ($1, $2, $3, $4) RETURNING ${TASK_COLS}`,
-        [req.user!.id, kind, title, req.body.date],
+        `INSERT INTO tasks (user_id, kind, title, date, repeat, target, links) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${TASK_COLS}`,
+        [req.user!.id, kind, g.title, req.body.date, g.repeat, g.target, JSON.stringify(g.links)],
       ));
     } else {
       const t = timedInput(req.body ?? {}, false) as TimedTaskInput;
+      sameDay(t.start, t.dur);
       ({ rows: [row] } = await db.query<Task>(
         `INSERT INTO tasks (user_id, kind, title, date, start, dur, color, icon, repeat)
          VALUES ($1, 'timed', $2, $3, $4, $5, $6, $7, $8) RETURNING ${TASK_COLS}`,
@@ -189,8 +244,20 @@ export function createApp(db: Db) {
 
   api.patch('/tasks/:id', requireUser, async (req, res) => {
     const task = await ownTask(req);
-    if (task.kind !== 'timed') throw bad('Goals cannot be edited');
+    if (task.kind !== 'timed') {
+      const g = goalInput(task.kind, req.body ?? {}, true);
+      await checkLinks(req.user!.id, task.kind, g.links, task.id);
+      const keys = Object.keys(g) as (keyof GoalInput)[];
+      if (!keys.length) return res.json({ task: toTask(task) });
+      const sets = keys.map((k, i) => `"${k}" = $${i + 3}`).join(', ');
+      const { rows } = await db.query<Task>(
+        `UPDATE tasks SET ${sets} WHERE id = $1 AND user_id = $2 RETURNING ${TASK_COLS}`,
+        [task.id, req.user!.id, ...keys.map((k) => (k === 'links' ? JSON.stringify(g.links) : g[k]))],
+      );
+      return res.json({ task: toTask(rows[0]) });
+    }
     const patch = timedInput(req.body ?? {}, true);
+    sameDay(patch.start ?? task.start!, patch.dur ?? task.dur!);
     const keys = Object.keys(patch) as (keyof TimedTaskInput)[];
     if (!keys.length) return res.json({ task: toTask(task) });
     const sets = keys.map((k, i) => `"${k}" = $${i + 3}`).join(', ');
@@ -218,6 +285,8 @@ export function createApp(db: Db) {
   api.delete('/tasks/:id', requireUser, async (req, res) => {
     const task = await ownTask(req);
     await db.query('DELETE FROM tasks WHERE id = $1 AND user_id = $2', [task.id, req.user!.id]);
+    // Goals that counted this task stop counting it.
+    await db.query(`UPDATE tasks SET links = links - $2::text WHERE user_id = $1 AND links ? $2::text`, [req.user!.id, task.id]);
     res.json({ ok: true });
   });
 

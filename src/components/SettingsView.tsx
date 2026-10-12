@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Pwa } from '../pwa';
+import { PasswordCard } from './PasswordCard';
 import type { User } from '../../shared/types';
 
 interface Props {
@@ -73,6 +74,7 @@ export function SettingsView({ me, onUser, flash, pwa, replayTour, signOut }: Pr
         </label>
         <div className="profile-note">Signed in as <strong>{me.email}</strong> · {me.role === 'admin' ? 'Administrator' : 'Free plan'}</div>
       </div>
+      <PasswordCard email={me.email} flash={flash} />
       <div className="card install">
         <div className="install-text">
           <div className="card-title">Install LockedIn</div>

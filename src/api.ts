@@ -1,4 +1,4 @@
-import type { AdminStats, AdminUser, NotifyResult, Task, TimedTaskInput, User } from '../shared/types';
+import type { AdminStats, AdminUser, GoalInput, NotifyResult, Task, TimedTaskInput, User } from '../shared/types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -39,12 +39,14 @@ export const api = {
   signUp: (name: string, email: string, password: string) => request<{ user: User }>('POST', '/auth/signup', { name, email, password }),
   signOut: () => request<{ ok: true }>('POST', '/auth/signout'),
   rename: (name: string) => request<{ user: User }>('PATCH', '/me', { name }),
+  changePassword: (current: string, next: string) => request<{ ok: true }>('POST', '/me/password', { current, next }),
   finishTutorial: () => request<{ user: User }>('POST', '/me/onboarded'),
 
   tasks: () => request<{ tasks: Task[] }>('GET', '/tasks'),
   createTask: (t: TimedTaskInput) => request<{ task: Task }>('POST', '/tasks', { ...t, kind: 'timed' }),
   createGoal: (kind: 'week' | 'month', title: string, date: string) => request<{ task: Task }>('POST', '/tasks', { kind, title, date }),
   updateTask: (id: string, t: Partial<TimedTaskInput>) => request<{ task: Task }>('PATCH', `/tasks/${id}`, t),
+  updateGoal: (id: string, g: Partial<GoalInput>) => request<{ task: Task }>('PATCH', `/tasks/${id}`, g),
   toggle: (id: string, key: string) => request<{ task: Task }>('POST', `/tasks/${id}/toggle`, { key }),
   deleteTask: (id: string) => request<{ ok: true }>('DELETE', `/tasks/${id}`),
 

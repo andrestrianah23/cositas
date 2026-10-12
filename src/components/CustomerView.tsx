@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
-import { addDays, DOWF, keyFor, MONTHS, occurs, parse, toMin, weekStart, ymd } from '../../shared/dates';
+import { addDays, DOWF, MONTHS, occurs, parse, toMin, weekStart, ymd } from '../../shared/dates';
+import { goalInPeriod } from '../../shared/goals';
 import type { AdminUser, Task, User } from '../../shared/types';
 import { DayView } from './DayView';
 import { Goals } from './Goals';
@@ -60,7 +61,7 @@ export function CustomerView({ id, me, flash, onBack, onChanged }: Props) {
   };
 
   const d = parse(sel), ws = weekStart(d), weekKey = ymd(ws), monthKey = sel.slice(0, 7);
-  const goals = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && keyFor(t, t.date) === key);
+  const goals = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && goalInPeriod(t, key));
 
   return (
     <div className="customer">
@@ -115,8 +116,8 @@ export function CustomerView({ id, me, flash, onBack, onChanged }: Props) {
       </div>
       <DayView sel={sel} today={today} onDay={onDay} setSel={setSel} />
       <div className="customer-goals">
-        <Goals title="Weekly goals" placeholder="" goals={goals('week', weekKey)} doneKey={weekKey} />
-        <Goals title="Monthly goals" placeholder="" goals={goals('month', monthKey)} doneKey={monthKey} />
+        <Goals title="Weekly goals" placeholder="" goals={goals('week', weekKey)} periodKey={weekKey} tasks={tasks} />
+        <Goals title="Monthly goals" placeholder="" goals={goals('month', monthKey)} periodKey={monthKey} tasks={tasks} />
       </div>
     </div>
   );

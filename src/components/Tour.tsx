@@ -36,7 +36,7 @@ const steps = (name: string, admin: boolean): Step[] => [
     title: 'Add a task with +',
     points: [
       <>Tap the green <strong>+</strong> button in the corner.</>,
-      'Name it, pick an icon, then set the date, the start time and how long it takes.',
+      'Name it, pick an icon, then set the date and when it starts and ends. A task can be as long as you need, up to midnight.',
       <>Choose a color, and whether it <strong>repeats</strong>: once, every day, every week or every month.</>,
     ],
   },
@@ -57,6 +57,7 @@ const steps = (name: string, admin: boolean): Step[] => [
     points: [
       'Every day’s tasks sit side by side, so you can spot busy and quiet days at a glance. Tap a day to open it.',
       <><strong>Weekly goals</strong> are for things to get done sometime this week, like “call mom”. Add them at the bottom and tick them off.</>,
+      <>Tap a goal to <strong>link it to your daily tasks</strong>. Say “Gym 4 times”: every gym session you tick counts, and the goal ticks itself at 4. Set it to repeat every week.</>,
     ],
   },
   {
@@ -65,7 +66,7 @@ const steps = (name: string, admin: boolean): Step[] => [
     title: 'Plan the month',
     points: [
       'Each colored dot is a task on that day. Tap any day to open it.',
-      <><strong>Monthly goals</strong> hold the bigger things, like paying rent or booking the dentist.</>,
+      <><strong>Monthly goals</strong> hold the bigger things, like paying rent or booking the dentist. They can count daily tasks too, or the weeks you met a weekly goal.</>,
       <>Switch between <strong>Day</strong>, <strong>Week</strong> and <strong>Month</strong> with the tabs at the top or the menu.</>,
     ],
   },
@@ -76,6 +77,7 @@ const steps = (name: string, admin: boolean): Step[] => [
     points: [
       <><strong>Install</strong> LockedIn on your home screen so it opens like a regular app. On iPhone: Share, then “Add to Home Screen”.</>,
       <>Turn on <strong>reminders</strong> and you’ll get a notification the moment each task starts, even when the app is closed.</>,
+      <>Two hours after your last task, if anything is still unticked, you’ll get <strong>one friendly check-in</strong> so nothing slips through. Never more than once a day.</>,
       'The card at the top of your planner walks you through both.',
     ],
   },

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { fmtD } from '../../shared/dates';
-import { DURATIONS, ICONS, REPEATS, type TimedTaskInput } from '../../shared/types';
+import { fmtD, pad, toMin } from '../../shared/dates';
+import { ICONS, REPEATS, type TimedTaskInput } from '../../shared/types';
 import { COLORS, INK, LABEL, REPEAT_LABEL, SOFT } from '../theme';
 
 export type Draft = TimedTaskInput & { id: string | null };
@@ -14,11 +14,27 @@ interface Props {
   flash: (m: string) => void;
 }
 
+const DAY = 1440;
+const toHM = (m: number) => `${pad(Math.floor((m % DAY) / 60))}:${pad(m % 60)}`;
+const TOO_EARLY = 'End time must be after the start time, on the same day. For something that runs past midnight, add a second task for the next day.';
+
 export function TaskSheet({ draft, isWide, onClose, onSave, onDelete, flash }: Props) {
-  const [s, setS] = useState(draft);
+  // Older tasks could run past midnight; editing one trims it to end at midnight.
+  const [s, setS] = useState(() => ({ ...draft, dur: Math.min(draft.dur, DAY - toMin(draft.start)) }));
   const [busy, setBusy] = useState(false);
   const up = (p: Partial<Draft>) => setS((x) => ({ ...x, ...p }));
   const color = COLORS[s.color];
+  // Tasks stay within one day: the end is at most midnight (shown as 12:00 AM).
+  const end = toHM(Math.min(toMin(s.start) + s.dur, DAY));
+  const setStart = (v: string) => {
+    const start = toMin(v);
+    // Keep the length when the start moves, but never past midnight.
+    up({ start: v, dur: s.dur > 0 ? Math.min(s.dur, DAY - start) : s.dur });
+  };
+  const setEnd = (v: string) => {
+    const endMin = toMin(v) === 0 ? DAY : toMin(v);
+    up({ dur: endMin - toMin(s.start) });
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -37,6 +53,7 @@ export function TaskSheet({ draft, isWide, onClose, onSave, onDelete, flash }: P
 
   const save = () => {
     if (!s.title.trim()) return flash('Give your task a name');
+    if (s.dur < 1) return flash(TOO_EARLY);
     run(() => onSave({ ...s, title: s.title.trim() }));
   };
 
@@ -58,16 +75,16 @@ export function TaskSheet({ draft, isWide, onClose, onSave, onDelete, flash }: P
             </button>
           ))}
         </div>
-        <div className="sheet-grid">
-          <label className="field">Date<input type="date" value={s.date} onChange={(e) => e.target.value && up({ date: e.target.value })} /></label>
-          <label className="field">Start<input type="time" value={s.start} onChange={(e) => e.target.value && up({ start: e.target.value })} /></label>
-        </div>
-        <div className="sheet-section">
-          <div className="sheet-label">How long?</div>
-          <div className="chips">
-            {DURATIONS.map((m) => (
-              <button key={m} aria-pressed={s.dur === m} onClick={() => up({ dur: m })} style={{ background: s.dur === m ? color : SOFT, color: s.dur === m ? '#fff' : INK }}>{fmtD(m)}</button>
-            ))}
+        <label className="field">Date<input type="date" value={s.date} onChange={(e) => e.target.value && up({ date: e.target.value })} /></label>
+        <div className="sheet-times">
+          <div className="sheet-grid">
+            {/* Moving the start keeps the length; the end follows. */}
+            <label className="field">Start<input type="time" value={s.start} onChange={(e) => e.target.value && setStart(e.target.value)} /></label>
+            <label className="field">End<input type="time" value={end} onChange={(e) => e.target.value && setEnd(e.target.value)} /></label>
+          </div>
+          <div className={`sheet-length${s.dur < 1 ? ' bad' : ''}`}>
+            <span className="ms">schedule</span>
+            {s.dur < 1 ? TOO_EARLY : `${fmtD(s.dur)}${toMin(s.start) + s.dur === DAY ? ' · ends at midnight' : ''}`}
           </div>
         </div>
         <div className="sheet-section">

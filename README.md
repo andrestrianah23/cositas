@@ -6,9 +6,10 @@ A daily, weekly and monthly planner you can install as an app (PWA). Anyone can 
 - **Day**: a timeline where each task's block height matches how long it takes. Tick tasks off, and gaps of 30 minutes or more show as free time.
 - **Week**: a 7-day grid of tasks, plus a list of weekly goals.
 - **Month**: a calendar with a colored dot per task, plus a list of monthly goals.
-- **Tasks**: name, icon, date, start time, duration, color, and repeat (once, daily, weekly or monthly).
+- **Tasks**: name, icon, date, start and end time (any length, ending by midnight; longer things become a second task the next day), color, and repeat (once, daily, weekly or monthly).
+- **Goals that track themselves**: weekly and monthly goals can repeat every period and be linked to daily tasks with a target ("Gym 4 times a week"). Each tick of a linked task counts, and the goal ticks itself at the target. Monthly goals can also count the weeks a weekly goal was met.
 - **Admin panel**: usage stats, user search, switching people between user and admin, suspending accounts (which signs them out everywhere) and deleting users.
-- **Install and reminders**: a card at the top of the planner walks people through installing the app (one tap on Android and desktop Chrome/Edge, Share → Add to Home Screen on iPhone), then asks them to turn on reminders. With reminders on, each device gets a push notification when a task starts, even when the app is closed. Reminders can be turned on, tested and turned off in Settings.
+- **Install and reminders**: a card at the top of the planner walks people through installing the app (one tap on Android and desktop Chrome/Edge, Share → Add to Home Screen on iPhone), then asks them to turn on reminders. With reminders on, each device gets a push notification when a task starts, even when the app is closed, plus one evening check-in two hours after the day's last task if anything is still unticked (at most once a day). Reminders can be turned on, tested and turned off in Settings.
 - **Responsive**: phones get a bottom nav bar and a bottom sheet. Screens 900px wide or more get a sidebar and a centered dialog.
 
 The original Claude Design handoff (prototype, chat transcript and the original blue logo) is kept in [`design/`](design/).

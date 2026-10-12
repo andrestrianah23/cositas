@@ -82,6 +82,48 @@ export function localNow(tz: string, now = new Date()) {
 
 // A tick can run late; anything that started in the last few minutes still gets its reminder once.
 const CATCH_UP_MIN = 3;
+/** The evening check-in goes out this long after the day's last task ends... */
+export const CHECKIN_AFTER_MIN = 120;
+/** ...and is skipped if the server only gets to it more than this much later. */
+const CHECKIN_WINDOW_MIN = 180;
+
+const shiftDay = (ds: string, n: number) => {
+  const [y, m, d] = ds.split('-').map(Number);
+  const x = new Date(Date.UTC(y, m - 1, d + n));
+  return x.toISOString().slice(0, 10);
+};
+
+/** "Gym", "Gym and Read", "Gym, Read and Journal", "Gym, Read, Journal and 2 more". */
+function listTitles(titles: string[]) {
+  if (titles.length === 1) return titles[0];
+  const shown = titles.slice(0, 3), rest = titles.length - shown.length;
+  if (rest > 0) return `${shown.join(', ')} and ${rest} more`;
+  return `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
+}
+
+/**
+ * One gentle nudge a day: two hours after the day's last task ends, if anything is still unticked.
+ * Looks at today and yesterday, since a late last task puts the check-in after midnight.
+ */
+async function sendCheckIn(db: Db, userId: string, tasks: Task[], ds: string, min: number, send: typeof sendToUser) {
+  for (const [day, rel] of [[ds, min], [shiftDay(ds, -1), min + 1440]] as const) {
+    const due = tasks.filter((t) => occurs(t, day));
+    if (!due.length) continue;
+    const lastEnd = Math.max(...due.map((t) => toMin(t.start!) + t.dur!));
+    const at = lastEnd + CHECKIN_AFTER_MIN;
+    if (rel < at || rel > at + CHECKIN_WINDOW_MIN) continue;
+    const open = due.filter((t) => !t.done?.[day]).sort((a, b) => toMin(a.start!) - toMin(b.start!));
+    if (!open.length) continue;
+    const { rowCount } = await db.query('INSERT INTO checkin_log (user_id, day) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, day]);
+    if (!rowCount) continue;
+    await send(db, userId, {
+      title: open.length === 1 ? 'Quick check-in: 1 task to tick' : `Quick check-in: ${open.length} tasks to tick`,
+      body: `Did you get to ${listTitles(open.map((t) => t.title))}? Tick off what you did so your day counts.`,
+      url: `/?day=${day}`,
+      tag: `checkin-${day}`,
+    });
+  }
+}
 
 /** Sends "task starting" reminders for every subscribed user whose task starts now in their time zone. */
 export async function sendDueReminders(db: Db, now = new Date(), send: typeof sendToUser = sendToUser) {
@@ -97,10 +139,12 @@ export async function sendDueReminders(db: Db, now = new Date(), send: typeof se
       if (start > min || start < min - CATCH_UP_MIN || !occurs(t, ds) || t.done?.[ds]) continue;
       const { rowCount } = await db.query('INSERT INTO push_log (task_id, day) VALUES ($1, $2) ON CONFLICT DO NOTHING', [t.id, ds]);
       if (!rowCount) continue;
-      await send(db, user_id, { title: t.title, body: `Starting now · ${fmtT(start)} – ${fmtT(start + t.dur!)}`, url: '/', tag: `task-${t.id}` });
+      await send(db, user_id, { title: t.title, body: `Starting now · ${fmtT(start)} – ${fmtT(start + t.dur!)}`, url: `/?day=${ds}`, tag: `task-${t.id}` });
     }
+    await sendCheckIn(db, user_id, tasks, ds, min, send);
   }
   await db.query(`DELETE FROM push_log WHERE sent_at < now() - interval '3 days'`);
+  await db.query(`DELETE FROM checkin_log WHERE sent_at < now() - interval '7 days'`);
 }
 
 export function startReminderLoop(db: Db) {

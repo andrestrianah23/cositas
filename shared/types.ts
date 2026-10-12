@@ -50,7 +50,12 @@ export interface Task {
   dur: number | null;
   color: number | null;
   icon: string | null;
+  /** Timed tasks: once/daily/weekly/monthly. Goals: 'none', or 'weekly'/'monthly' for a goal that comes back every period. */
   repeat: Repeat | null;
+  /** Goals only: how many ticks of the linked tasks complete the goal (e.g. 4 gym sessions a week). */
+  target: number | null;
+  /** Goals only: ids of the daily tasks (or, for monthly goals, weekly goals) whose ticks count toward the target. */
+  links: string[];
   /** Completion per occurrence: day (YYYY-MM-DD), week start (YYYY-MM-DD) or month (YYYY-MM). */
   done: Record<string, boolean>;
 }
@@ -66,6 +71,16 @@ export interface TimedTaskInput {
 }
 
 export const ICONS = ['alarm', 'self_improvement', 'shower', 'directions_bike', 'coffee', 'mail', 'edit', 'groups', 'work', 'menu_book', 'restaurant', 'fitness_center', 'directions_run', 'shopping_cart', 'water_drop', 'favorite', 'call', 'bedtime'];
-export const DURATIONS = [15, 30, 45, 60, 90, 120];
+export interface GoalInput {
+  title: string;
+  repeat: 'none' | 'weekly' | 'monthly';
+  target: number | null;
+  links: string[];
+}
+
+/** Longest task: a whole day. Tasks end by midnight; the server also checks start + length. */
+export const MAX_DUR = 1440;
+export const MAX_TARGET = 99;
+export const MAX_LINKS = 20;
 export const COLOR_COUNT = 8;
 export const REPEATS: Repeat[] = ['none', 'daily', 'weekly', 'monthly'];

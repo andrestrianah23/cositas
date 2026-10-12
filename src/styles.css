@@ -327,3 +327,52 @@ a.user-meta { text-decoration: none; }
 .facts span { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
 .plan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .customer-goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+
+/* ---------- Task sheet: start/end ---------- */
+.sheet-times { display: flex; flex-direction: column; gap: 8px; }
+.sheet > .field input { border-radius: 12px; padding: 11px 12px; background: var(--bg); font-size: inherit; font-weight: inherit; color: inherit; }
+.sheet-length { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--accent-text); }
+.sheet-length .ms { font-size: 17px; }
+.sheet-length.bad { color: var(--danger-fg); }
+
+/* ---------- Linked goals ---------- */
+.goal { align-items: flex-start; }
+.goal-check { margin-top: 1px; }
+.goal-check:disabled.on { opacity: 1; }
+.goal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.goal-main.clickable { cursor: pointer; }
+.goal-main.clickable:hover .goal-name:not(.done) { color: var(--accent-text); }
+.goal-name.done { text-decoration: line-through; color: var(--faint); }
+.goal-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.goal-title .repeat-chip { color: var(--label); text-decoration: none; }
+.goal-progress { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.goal-progress strong { color: var(--ink); }
+.goal-bar { height: 6px; background: var(--chip); border-radius: 3px; overflow: hidden; max-width: 260px; }
+.goal-bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease; }
+.goal-hint { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 12px; }
+.goal-hint .ms { font-size: 15px; }
+.track-start { display: flex; align-items: center; gap: 12px; text-align: left; border: 1.5px dashed var(--field); background: var(--bg); border-radius: 16px; padding: 14px; cursor: pointer; }
+.track-start:hover { border-color: var(--accent); }
+.track-start > .ms { width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-fg); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.track-start strong { display: block; font-size: 15px; }
+.track-start span span { font-size: 13px; color: var(--muted); }
+.track { display: flex; flex-direction: column; gap: 10px; }
+.stepper { display: flex; align-items: center; gap: 12px; background: var(--bg); border-radius: 16px; padding: 8px; align-self: flex-start; }
+.stepper button { width: 40px; height: 40px; border-radius: 12px; border: 0; background: #fff; box-shadow: var(--tab-shadow); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.stepper button .ms { font-size: 22px; }
+.stepper div { min-width: 120px; text-align: center; }
+.stepper strong { font-size: 24px; font-weight: 800; margin-right: 6px; }
+.stepper div span { font-weight: 700; color: var(--label); font-size: 14px; }
+.link-help { font-size: 13px; font-weight: 700; color: var(--label); margin-top: 4px; }
+.link-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.link-row { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); background: #fff; border-radius: 14px; padding: 8px 10px; cursor: pointer; text-align: left; }
+.link-row.on { border-color: var(--accent); background: var(--accent-soft); }
+.link-tile { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.link-tile .ms { color: #fff; font-size: 19px; }
+.link-tile.goal { background: var(--ink); }
+.link-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.link-text strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-text span { font-size: 12px; color: var(--muted); font-weight: 600; }
+.link-box { width: 24px; height: 24px; border-radius: 8px; border: 2px solid var(--field); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.link-row.on .link-box { background: var(--accent); border-color: var(--accent); }
+.link-box .ms { color: #fff; font-size: 16px; }

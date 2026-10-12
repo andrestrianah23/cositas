@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { addDays, DOWF, fmtT, keyFor, MONTHS, occurs, parse, toMin, weekStart, ymd } from '../../shared/dates';
+import { goalInPeriod } from '../../shared/goals';
+import { GoalSheet } from './GoalSheet';
 import type { Task } from '../../shared/types';
 import { COLORS } from '../theme';
 import { DayView } from './DayView';
@@ -25,12 +27,21 @@ function sampleTasks(today: string): Task[] {
     ['Run', '18:00', 45, 7, 'directions_run', 'daily'],
     ['Read', '21:30', 30, 5, 'menu_book', 'daily'],
   ];
+  // Runs ticked on the two days before today, so the linked goal below starts part-way.
+  const ran = Object.fromEntries([1, 2].map((n) => [ymd(addDays(parse(today), -n)), true]));
   const tasks: Task[] = timed.map(([title, start, dur, color, icon, repeat], i) => ({
-    id: `demo-${i}`, kind: 'timed', title, date: first, start, dur, color, icon, repeat,
-    done: i < 2 ? { [today]: true } : {},
+    id: `demo-${i}`, kind: 'timed', title, date: first, start, dur, color, icon, repeat, target: null, links: [],
+    done: title === 'Run' ? ran : i < 2 ? { [today]: true } : {},
   }));
-  const goals: [string, 'week' | 'month'][] = [['Finish the project brief', 'week'], ['Call mom', 'week'], ['Pay rent', 'month'], ['Book the dentist', 'month']];
-  goals.forEach(([title, kind], i) => tasks.push({ id: `goal-${i}`, kind, title, date: today, start: null, dur: null, color: null, icon: null, repeat: null, done: i === 1 ? { [keyFor({ kind }, today)]: true } : {} }));
+  const goal = (id: string, kind: 'week' | 'month', title: string, extra: Partial<Task> = {}): Task =>
+    ({ id, kind, title, date: today, start: null, dur: null, color: null, icon: null, repeat: 'none', target: null, links: [], done: {}, ...extra });
+  tasks.push(
+    goal('goal-run', 'week', 'Run 4 times', { repeat: 'weekly', target: 4, links: ['demo-6'] }),
+    goal('goal-0', 'week', 'Finish the project brief'),
+    goal('goal-1', 'week', 'Call mom', { done: { [keyFor({ kind: 'week' }, today)]: true } }),
+    goal('goal-read', 'month', 'Read 20 nights', { repeat: 'monthly', target: 20, links: ['demo-7'] }),
+    goal('goal-2', 'month', 'Pay rent'),
+  );
   return tasks;
 }
 
@@ -200,9 +211,10 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
   };
   const edit = (t: Task) => setDraft({ id: t.id, title: t.title, icon: t.icon!, color: t.color ?? 0, start: t.start!, dur: t.dur!, repeat: t.repeat ?? 'none', date: t.date });
   const ws = weekStart(parse(sel)), weekKey = ymd(ws), monthKey = sel.slice(0, 7);
-  const goals = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && keyFor(t, t.date) === key);
+  const goals = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && goalInPeriod(t, key));
+  const [goalDraft, setGoalDraft] = useState<Task | null>(null);
   const addGoal = (kind: 'week' | 'month') => async (title: string) => {
-    setTasks((ts) => [...ts, { id: `goal-${Date.now()}`, kind, title, date: sel, start: null, dur: null, color: null, icon: null, repeat: null, done: {} }]);
+    setTasks((ts) => [...ts, { id: `goal-${Date.now()}`, kind, title, date: sel, start: null, dur: null, color: null, icon: null, repeat: 'none', target: null, links: [], done: {} }]);
     return true;
   };
   const shift = (dir: number) => {
@@ -229,13 +241,13 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
         {view === 'week' && (
           <>
             <WeekView sel={sel} today={today} isWide={isWide} onDay={onDay} pickDay={(ds) => { setSel(ds); setView('day'); }} onEdit={(t, ds) => { setSel(ds); edit(t); }} />
-            <Goals title="Weekly goals" placeholder="Add a goal for this week" goals={goals('week', weekKey)} doneKey={weekKey} onAdd={addGoal('week')} onToggle={(g) => toggle(g, g.date)} onDelete={(g) => setTasks((ts) => ts.filter((x) => x.id !== g.id))} />
+            <Goals title="Weekly goals" placeholder="Add a goal for this week" goals={goals('week', weekKey)} periodKey={weekKey} tasks={tasks} onAdd={addGoal('week')} onToggle={(g) => toggle(g, sel)} onEdit={setGoalDraft} onDelete={(g) => setTasks((ts) => ts.filter((x) => x.id !== g.id))} />
           </>
         )}
         {view === 'month' && (
           <>
             <MonthView sel={sel} today={today} isWide={isWide} onDay={onDay} pickDay={(ds) => { setSel(ds); setView('day'); }} />
-            <Goals title="Monthly goals" placeholder="Add a goal for this month" goals={goals('month', monthKey)} doneKey={monthKey} onAdd={addGoal('month')} onToggle={(g) => toggle(g, g.date)} onDelete={(g) => setTasks((ts) => ts.filter((x) => x.id !== g.id))} />
+            <Goals title="Monthly goals" placeholder="Add a goal for this month" goals={goals('month', monthKey)} periodKey={monthKey} tasks={tasks} onAdd={addGoal('month')} onToggle={(g) => toggle(g, sel)} onEdit={setGoalDraft} onDelete={(g) => setTasks((ts) => ts.filter((x) => x.id !== g.id))} />
           </>
         )}
       </div>
@@ -250,7 +262,7 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
           onClose={() => setDraft(null)}
           onSave={async ({ id, ...input }) => {
             if (id) setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...input } : t)));
-            else setTasks((ts) => [...ts, { ...input, id: `demo-${Date.now()}`, kind: 'timed', done: {} }]);
+            else setTasks((ts) => [...ts, { ...input, id: `demo-${Date.now()}`, kind: 'timed', target: null, links: [], done: {} }]);
             setDraft(null);
             setSel(input.date);
             setView('day');
@@ -263,6 +275,26 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
           }}
         />
       )}
+      {goalDraft && (
+        <GoalSheet
+          key={goalDraft.id}
+          goal={goalDraft}
+          tasks={tasks}
+          isWide={isWide}
+          flash={flash}
+          onClose={() => setGoalDraft(null)}
+          onSave={async (input) => {
+            setTasks((ts) => ts.map((t) => (t.id === goalDraft.id ? { ...t, ...input } : t)));
+            setGoalDraft(null);
+            flash('Goal saved');
+          }}
+          onDelete={async () => {
+            setTasks((ts) => ts.filter((t) => t.id !== goalDraft.id).map((t) => ({ ...t, links: t.links.filter((l) => l !== goalDraft.id) })));
+            setGoalDraft(null);
+            flash('Goal deleted');
+          }}
+        />
+      )}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
@@ -271,10 +303,10 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
 // ---------- Page ----------
 
 const FEATURES = [
-  { icon: 'view_day', title: 'A timeline, not a to-do list', text: 'Every task is a block sized by how long it takes, so you see the shape of your day and the free time in it.' },
+  { icon: 'view_day', title: 'A timeline, not a to-do list', text: 'Set a start and an end and every task becomes a block on your day, so you see its shape and the free time in it.' },
   { icon: 'repeat', title: 'Routines on repeat', text: 'Set a task once and repeat it every day, week or month. Your mornings plan themselves.' },
-  { icon: 'flag', title: 'Goals for the week and month', text: 'Keep the bigger things, like “finish the brief” or “pay rent”, next to the days you’ll do them.' },
-  { icon: 'notifications_active', title: 'Reminders at the right moment', text: 'A gentle notification the minute each task starts, even when the app is closed.' },
+  { icon: 'link', title: 'Goals that track themselves', text: 'Set “Gym 4 times a week”, link it to your gym task, and every session you tick counts. Hit 4 and the goal ticks itself.' },
+  { icon: 'notifications_active', title: 'Reminders at the right moment', text: 'A gentle notification the minute each task starts, plus one evening check-in if anything is left unticked.' },
   { icon: 'install_mobile', title: 'Install in two taps', text: 'No app store needed. Add LockedIn to your home screen and it opens full screen like any app.' },
   { icon: 'devices', title: 'On every device', text: 'Plan on your laptop, tick things off on your phone. Your plan follows your account.' },
 ];
@@ -284,13 +316,13 @@ const FAQ = [
   { q: 'Do I need to download it from an app store?', a: 'No. LockedIn runs in your browser. Add it to your home screen and it opens full screen like any other app on your phone.' },
   { q: 'Does it work on iPhone and Android?', a: 'Yes, on both, and on computers too. On iPhone, reminders need iOS 16.4 or later and LockedIn added to your Home Screen. The app walks you through it.' },
   { q: 'Will my plan be on all my devices?', a: 'Yes. Sign in on your phone and your computer and you’ll see the same plan everywhere.' },
-  { q: 'How do reminders work?', a: 'Turn them on in the app and allow notifications. You’ll get one the moment each task starts. You can turn them off anytime in Settings.' },
+  { q: 'How do reminders work?', a: 'Turn them on in the app and allow notifications. You’ll get one the moment each task starts, and if anything is still unticked two hours after your last task, one friendly check-in. Never more than one a day. You can turn them off anytime in Settings.' },
   { q: 'Who can see my plans?', a: 'Your plan is tied to your account. The LockedIn team can view an account only to help with support.' },
 ];
 
 const STEPS = [
   { icon: 'person_add', title: 'Create your free account', text: 'Name, email, password. That’s it. A one-minute tour shows you around.' },
-  { icon: 'edit_calendar', title: 'Plan your day in minutes', text: 'Add tasks with a time and a length, set your routines to repeat, and add goals.' },
+  { icon: 'edit_calendar', title: 'Plan your day in minutes', text: 'Add tasks with a start and end time, set your routines to repeat, and link goals to them.' },
   { icon: 'notifications_active', title: 'Get nudged, tick it off', text: 'Turn on reminders. When a task starts you’ll know, and ticking it off fills your day’s bar.' },
 ];
 
