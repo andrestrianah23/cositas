@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-type View = 'day' | 'week' | 'month' | 'admin' | 'settings';
+type View = 'day' | 'week' | 'month' | 'progress' | 'admin' | 'settings';
 
 interface Step {
   /** The screen shown behind the card while this step is open. */
@@ -71,13 +71,23 @@ const steps = (name: string, admin: boolean): Step[] => [
     ],
   },
   {
+    view: 'progress',
+    icon: 'local_fire_department',
+    title: 'Build streaks, watch yourself improve',
+    points: [
+      <>Repeating tasks build <strong>streaks</strong>: “🔥 6 days” means six in a row. Don’t break the chain!</>,
+      <><strong>Progress</strong> shows how your week is going, the last 8 weeks, every habit’s streak and best run, and your goals.</>,
+    ],
+  },
+  {
     view: 'day',
     icon: 'notifications_active',
     title: 'Install it and get reminders',
     points: [
       <><strong>Install</strong> LockedIn on your home screen so it opens like a regular app. On iPhone: Share, then “Add to Home Screen”.</>,
       <>Turn on <strong>reminders</strong> and you’ll get a notification the moment each task starts, even when the app is closed.</>,
-      <>Two hours after your last task, if anything is still unticked, you’ll get <strong>one friendly check-in</strong> so nothing slips through. Never more than once a day.</>,
+      <>Tap <strong>Done</strong> on a reminder to tick the task off right from your lock screen, or <strong>Remind me in 10 min</strong>. Each task can also remind you 5 to 60 minutes early.</>,
+      <>A <strong>morning briefing</strong> before your first task, <strong>one check-in</strong> in the evening if something’s unticked, and a <strong>Sunday review</strong> of your week. Pick what you get in Settings.</>,
       'The card at the top of your planner walks you through both.',
     ],
   },

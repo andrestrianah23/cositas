@@ -16,7 +16,7 @@ type Start = (mode: 'signin' | 'signup') => void;
 // ---------- Sample plan for the live demo (kept in memory only) ----------
 
 function sampleTasks(today: string): Task[] {
-  const first = ymd(addDays(parse(today), -7));
+  const first = ymd(addDays(parse(today), -14));
   const timed: [string, string, number, number, string, Task['repeat']][] = [
     ['Wake up', '07:00', 15, 0, 'alarm', 'daily'],
     ['Yoga', '07:15', 30, 1, 'self_improvement', 'daily'],
@@ -29,12 +29,15 @@ function sampleTasks(today: string): Task[] {
   ];
   // Runs ticked on the two days before today, so the linked goal below starts part-way.
   const ran = Object.fromEntries([1, 2].map((n) => [ymd(addDays(parse(today), -n)), true]));
+  // Some history so the demo shows streaks: Wake up 10 days running, Yoga 6.
+  const lastDays = (n: number) => Object.fromEntries([...Array(n)].map((_, k) => [ymd(addDays(parse(today), -k)), true]));
+  const history: Record<string, Record<string, boolean>> = { 'Wake up': lastDays(10), Yoga: lastDays(6), Run: ran };
   const tasks: Task[] = timed.map(([title, start, dur, color, icon, repeat], i) => ({
-    id: `demo-${i}`, kind: 'timed', title, date: first, start, dur, color, icon, repeat, target: null, links: [],
-    done: title === 'Run' ? ran : i < 2 ? { [today]: true } : {},
+    id: `demo-${i}`, kind: 'timed', title, date: first, start, dur, color, icon, repeat, remind: 0, target: null, links: [],
+    done: history[title] ?? {},
   }));
   const goal = (id: string, kind: 'week' | 'month', title: string, extra: Partial<Task> = {}): Task =>
-    ({ id, kind, title, date: today, start: null, dur: null, color: null, icon: null, repeat: 'none', target: null, links: [], done: {}, ...extra });
+    ({ id, kind, title, date: today, start: null, dur: null, color: null, icon: null, repeat: 'none', remind: null, target: null, links: [], done: {}, ...extra });
   tasks.push(
     goal('goal-run', 'week', 'Run 4 times', { repeat: 'weekly', target: 4, links: ['demo-6'] }),
     goal('goal-0', 'week', 'Finish the project brief'),
@@ -209,12 +212,12 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
     const k = keyFor(t, ds);
     setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, done: { ...x.done, [k]: !x.done[k] } } : x)));
   };
-  const edit = (t: Task) => setDraft({ id: t.id, title: t.title, icon: t.icon!, color: t.color ?? 0, start: t.start!, dur: t.dur!, repeat: t.repeat ?? 'none', date: t.date });
+  const edit = (t: Task) => setDraft({ id: t.id, title: t.title, icon: t.icon!, color: t.color ?? 0, start: t.start!, dur: t.dur!, repeat: t.repeat ?? 'none', remind: t.remind ?? 0, date: t.date });
   const ws = weekStart(parse(sel)), weekKey = ymd(ws), monthKey = sel.slice(0, 7);
   const goals = (kind: 'week' | 'month', key: string) => tasks.filter((t) => t.kind === kind && goalInPeriod(t, key));
   const [goalDraft, setGoalDraft] = useState<Task | null>(null);
   const addGoal = (kind: 'week' | 'month') => async (title: string) => {
-    setTasks((ts) => [...ts, { id: `goal-${Date.now()}`, kind, title, date: sel, start: null, dur: null, color: null, icon: null, repeat: 'none', target: null, links: [], done: {} }]);
+    setTasks((ts) => [...ts, { id: `goal-${Date.now()}`, kind, title, date: sel, start: null, dur: null, color: null, icon: null, repeat: 'none', remind: null, target: null, links: [], done: {} }]);
     return true;
   };
   const shift = (dir: number) => {
@@ -251,7 +254,7 @@ function LiveDemo({ isWide }: { isWide: boolean }) {
           </>
         )}
       </div>
-      <button className="fab lp-demo-fab" onClick={() => setDraft({ id: null, title: '', icon: 'alarm', color: 0, start: '10:00', dur: 30, repeat: 'none', date: sel })} aria-label="Add a task to the demo">
+      <button className="fab lp-demo-fab" onClick={() => setDraft({ id: null, title: '', icon: 'alarm', color: 0, start: '10:00', dur: 30, repeat: 'none', remind: 0, date: sel })} aria-label="Add a task to the demo">
         <span className="ms">add</span>
       </button>
       {draft && (
@@ -308,6 +311,9 @@ const FEATURES = [
   { icon: 'link', title: 'Goals that track themselves', text: 'Set “Gym 4 times a week”, link it to your gym task, and every session you tick counts. Hit 4 and the goal ticks itself.' },
   { icon: 'notifications_active', title: 'Reminders at the right moment', text: 'A gentle notification the minute each task starts, plus one evening check-in if anything is left unticked.' },
   { icon: 'install_mobile', title: 'Install in two taps', text: 'No app store needed. Add LockedIn to your home screen and it opens full screen like any app.' },
+  { icon: 'local_fire_department', title: 'Streaks that keep you going', text: 'Every repeating task builds a streak. “🔥 12 days” is a chain you won’t want to break.' },
+  { icon: 'touch_app', title: 'Done from your lock screen', text: 'Tap Done right on the reminder to tick it off, or snooze it for 10 minutes. No need to open the app.' },
+  { icon: 'insights', title: 'See your progress', text: 'Your week, the last 8 weeks, every habit’s streak, plus a morning briefing and a Sunday review to keep you on track.' },
   { icon: 'devices', title: 'On every device', text: 'Plan on your laptop, tick things off on your phone. Your plan follows your account.' },
 ];
 
@@ -316,14 +322,14 @@ const FAQ = [
   { q: 'Do I need to download it from an app store?', a: 'No. LockedIn runs in your browser. Add it to your home screen and it opens full screen like any other app on your phone.' },
   { q: 'Does it work on iPhone and Android?', a: 'Yes, on both, and on computers too. On iPhone, reminders need iOS 16.4 or later and LockedIn added to your Home Screen. The app walks you through it.' },
   { q: 'Will my plan be on all my devices?', a: 'Yes. Sign in on your phone and your computer and you’ll see the same plan everywhere.' },
-  { q: 'How do reminders work?', a: 'Turn them on in the app and allow notifications. You’ll get one the moment each task starts, and if anything is still unticked two hours after your last task, one friendly check-in. Never more than one a day. You can turn them off anytime in Settings.' },
+  { q: 'How do reminders work?', a: 'Turn them on in the app and allow notifications. Each task reminds you when it starts (or up to an hour before), with a Done button to tick it off from the lock screen. You also get a morning briefing, one evening check-in if something is still unticked, and a Sunday review. Choose exactly which ones you want in Settings.' },
   { q: 'Who can see my plans?', a: 'Your plan is tied to your account. The LockedIn team can view an account only to help with support.' },
 ];
 
 const STEPS = [
   { icon: 'person_add', title: 'Create your free account', text: 'Name, email, password. That’s it. A one-minute tour shows you around.' },
   { icon: 'edit_calendar', title: 'Plan your day in minutes', text: 'Add tasks with a start and end time, set your routines to repeat, and link goals to them.' },
-  { icon: 'notifications_active', title: 'Get nudged, tick it off', text: 'Turn on reminders. When a task starts you’ll know, and ticking it off fills your day’s bar.' },
+  { icon: 'notifications_active', title: 'Get nudged, tick it off', text: 'Turn on reminders. When a task starts you’ll know. Tick it off, grow your streak, and watch your week fill up.' },
 ];
 
 export function Landing({ isWide, onStart }: { isWide: boolean; onStart: Start }) {

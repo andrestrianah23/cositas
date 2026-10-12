@@ -1,5 +1,6 @@
 import { addDays, DOW, fmtD, fmtT, parse, toMin, weekStart, ymd } from '../../shared/dates';
 import type { Task } from '../../shared/types';
+import { currentStreak, streakUnit } from '../../shared/stats';
 import { circle, colorOf, DOT, FAINT, INK, LINE, REPEAT_LABEL } from '../theme';
 
 interface Props {
@@ -10,6 +11,13 @@ interface Props {
   /** Without onEdit/onToggle the timeline is read-only (the admin's view of a customer's plan). */
   onEdit?: (t: Task) => void;
   onToggle?: (t: Task, ds: string) => void;
+}
+
+/** "🔥 6 days" once a habit has been ticked at least twice in a row. */
+function Streak({ t, asOf }: { t: Task; asOf: string }) {
+  const n = currentStreak(t, asOf);
+  if (n < 2) return null;
+  return <span className="streak-chip" title={`${n} ${streakUnit(t)}s in a row`}><span className="ms">local_fire_department</span>{n} {streakUnit(t)}s</span>;
 }
 
 export function DayView({ sel, today, onDay, setSel, onEdit, onToggle }: Props) {
@@ -58,6 +66,7 @@ export function DayView({ sel, today, onDay, setSel, onEdit, onToggle }: Props) 
                 <div className="item-range mono">
                   {fmtT(st)} – {fmtT(en)} ({fmtD(dur)})
                   {repeat && <span className="repeat-chip"><span className="ms">repeat</span>{repeat}</span>}
+                  <Streak t={t} asOf={sel < today ? sel : today} />
                 </div>
                 <div className="item-title" style={{ textDecoration: done ? 'line-through' : 'none', color: done ? FAINT : INK }}>{t.title}</div>
                 {gap >= 30 && <div className="item-gap">{fmtD(gap)} free</div>}

@@ -15,9 +15,10 @@ import { Nudge } from './components/Nudge';
 import { Tour } from './components/Tour';
 import { GoalSheet } from './components/GoalSheet';
 import { Landing } from './components/Landing';
+import { ProgressView } from './components/ProgressView';
 import { forgetDevice, usePwa } from './pwa';
 
-type View = 'day' | 'week' | 'month' | 'admin' | 'settings';
+type View = 'day' | 'week' | 'month' | 'progress' | 'admin' | 'settings';
 
 const CAL_VIEWS: [View, string][] = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']];
 
@@ -33,12 +34,14 @@ function useWidth() {
 
 type AuthMode = 'signin' | 'signup' | null;
 
-/** Reminders open /?day=YYYY-MM-DD; show that day, then tidy the address bar. */
-function openDayFromUrl(setSel: (d: string) => void) {
-  const params = new URLSearchParams(location.search);
-  const day = params.get('day');
-  if (isYmd(day)) setSel(day);
-  if (params.has('day')) history.replaceState(null, '', location.pathname + location.hash);
+/** Notifications open /?day=YYYY-MM-DD (that day) or /?view=progress (the weekly review). */
+function openFromUrl(url: URL, setSel: (d: string) => void, setView: (v: View) => void) {
+  const day = url.searchParams.get('day');
+  if (isYmd(day)) {
+    setSel(day);
+    setView('day');
+  }
+  if (url.searchParams.get('view') === 'progress') setView('progress');
 }
 const hashMode = (): AuthMode => (location.hash === '#signin' ? 'signin' : location.hash === '#signup' ? 'signup' : null);
 
@@ -69,20 +72,36 @@ export function App() {
   }, []);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Tapping a reminder while the app is already open: jump to that day.
+  const signedIn = useRef(false);
+  const reloadTasks = useCallback(async () => {
+    if (!signedIn.current) return;
+    try {
+      setTasks((await api.tasks()).tasks);
+    } catch {
+      // Offline or signed out: keep what's on screen.
+    }
+  }, []);
+
+  // Messages from the service worker: a reminder was tapped while the app is open (jump to that day or screen),
+  // or a task was ticked from a notification's Done button (refresh).
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'refresh') return void reloadTasks();
       if (e.data?.type !== 'open' || typeof e.data.url !== 'string') return;
-      const day = new URL(e.data.url, location.origin).searchParams.get('day');
-      if (isYmd(day)) {
-        setSel(day);
-        setView('day');
-      }
+      openFromUrl(new URL(e.data.url, location.origin), setSel, setView);
+      reloadTasks();
     };
     navigator.serviceWorker.addEventListener('message', onMsg);
     return () => navigator.serviceWorker.removeEventListener('message', onMsg);
-  }, []);
+  }, [reloadTasks]);
+
+  // Coming back to the app (e.g. after ticking something from a notification or another device): refresh.
+  useEffect(() => {
+    const onVis = () => document.visibilityState === 'visible' && reloadTasks();
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [reloadTasks]);
   const today = ymd(new Date());
   const pwa = usePwa(!!me);
 
@@ -93,6 +112,7 @@ export function App() {
   }, []);
 
   const signedOut = useCallback(() => {
+    signedIn.current = false;
     setMe(null);
     setTasks([]);
     setDraft(null);
@@ -105,7 +125,10 @@ export function App() {
     setMe(u);
     setView('day');
     setSel(ymd(new Date()));
-    openDayFromUrl(setSel);
+    signedIn.current = true;
+    openFromUrl(new URL(location.href), setSel, setView);
+    const params = new URLSearchParams(location.search);
+    if (params.has('day') || params.has('view')) history.replaceState(null, '', location.pathname + location.hash);
     // First sign-in on this account: walk them through the app.
     setTouring(!u.onboarded);
     try {
@@ -168,8 +191,8 @@ export function App() {
   const openSheet = (t: Task | null) =>
     setDraft(
       t
-        ? { id: t.id, title: t.title, icon: t.icon!, color: t.color ?? 0, start: t.start!, dur: t.dur!, repeat: t.repeat ?? 'none', date: t.date }
-        : { id: null, title: '', icon: 'alarm', color: 0, start: '09:00', dur: 30, repeat: 'none', date: sel },
+        ? { id: t.id, title: t.title, icon: t.icon!, color: t.color ?? 0, start: t.start!, dur: t.dur!, repeat: t.repeat ?? 'none', remind: t.remind ?? 0, date: t.date }
+        : { id: null, title: '', icon: 'alarm', color: 0, start: '09:00', dur: 30, repeat: 'none', remind: 0, date: sel },
     );
 
   const saveSheet = async ({ id, ...input }: Draft) => {
@@ -250,8 +273,9 @@ export function App() {
   if (v === 'month') hSub = `${timed.length} scheduled tasks`;
   if (v === 'admin') [hTitle, hAccent, hSub] = ['Admin', 'panel', 'Manage accounts and see usage'];
   if (v === 'settings') [hTitle, hAccent, hSub] = ['Settings', '', ''];
+  if (v === 'progress') [hTitle, hAccent, hSub] = ['Your', 'progress', 'Keep showing up. It adds up.'];
 
-  const nav: [View, string, string][] = [['day', 'Day', 'view_day'], ['week', 'Week', 'calendar_view_week'], ['month', 'Month', 'calendar_month']];
+  const nav: [View, string, string][] = [['day', 'Day', 'view_day'], ['week', 'Week', 'calendar_view_week'], ['month', 'Month', 'calendar_month'], ['progress', 'Progress', 'insights']];
   if (admin) nav.push(['admin', 'Admin', 'admin_panel_settings']);
   nav.push(['settings', 'Settings', 'settings']);
 
@@ -332,6 +356,8 @@ export function App() {
                 <Goals title="Monthly goals" placeholder="Add a goal for this month" goals={goalList('month', monthKey)} periodKey={monthKey} tasks={tasks} onAdd={addGoal('month')} onToggle={(g) => toggle(g, sel)} onEdit={setGoalDraft} onDelete={removeTask} />
               </>
             )}
+
+            {v === 'progress' && <ProgressView tasks={tasks} today={today} />}
 
             {v === 'admin' && <AdminView me={me} flash={flash} />}
 

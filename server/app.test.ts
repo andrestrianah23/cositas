@@ -35,7 +35,7 @@ const timed = { kind: 'timed', title: 'Yoga', date: '2026-09-01', start: '07:15'
 process.env.AUTH_RATE_LIMIT = '1000';
 
 before(async () => {
-  await db.query('DROP TABLE IF EXISTS push_log, push_subscriptions, app_settings, tasks, sessions, users CASCADE');
+  await db.query('DROP TABLE IF EXISTS push_snooze, notify_log, checkin_log, push_log, push_subscriptions, app_settings, tasks, sessions, users CASCADE');
   await migrate(db);
   await ensureAdmin(db, { ADMIN_EMAIL: 'Boss@Lockedin.app', ADMIN_PASSWORD: 'boss-pass' });
   await initPush(db, {});
@@ -373,5 +373,126 @@ describe('end times, linked goals and password', () => {
     assert.equal(checkins()[1].url, '/?day=2026-10-07');
     assert.match(checkins()[1].body, /Gym, Read and Night walk/);
     await db.query("DELETE FROM push_subscriptions WHERE endpoint = 'https://push.example.com/send/9'");
+  });
+});
+
+describe('consistency: heads-up, done from the notification, snooze, morning briefing, weekly review', () => {
+  type P = { title: string; body: string; url?: string; taskId?: string; actions?: unknown[] };
+  let z: ReturnType<typeof client>;
+  let sent: P[] = [];
+  const fake = async (_db: unknown, _u: string, p: P) => (sent.push(p), 1);
+  const at = (iso: string) => sendDueReminders(db, new Date(iso), fake);
+
+  before(async () => {
+    z = client();
+    await z('POST', '/api/auth/signup', { name: 'Zoe Park', email: 'zoe@example.com', password: 'zoe-pass' });
+    await z('POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.example.com/send/zoe', keys: { p256dh: 'k', auth: 'a' } }, tz: 'UTC' });
+    // Only Zoe receives anything in this group.
+    await db.query("DELETE FROM push_subscriptions WHERE endpoint <> 'https://push.example.com/send/zoe'");
+  });
+  after(async () => {
+    await db.query("DELETE FROM push_subscriptions WHERE endpoint = 'https://push.example.com/send/zoe'");
+  });
+
+  test('each task picks its reminder: off, at the start or minutes before', async () => {
+    assert.equal((await z('POST', '/api/tasks', { ...timed, remind: 7 })).status, 400);
+    const plain = (await z('POST', '/api/tasks', { ...timed, title: 'Plain', start: '10:00', dur: 30, date: '2026-11-02', repeat: 'none' })).body.task;
+    assert.equal(plain.remind, 0);
+    const early = (await z('POST', '/api/tasks', { ...timed, title: 'Early', start: '10:00', dur: 30, date: '2026-11-02', repeat: 'none', remind: 10 })).body.task;
+    await z('POST', '/api/tasks', { ...timed, title: 'Quiet', start: '10:00', dur: 30, date: '2026-11-02', repeat: 'none', remind: -1 });
+    const dawn = (await z('POST', '/api/tasks', { ...timed, title: 'Dawn flight', start: '00:05', dur: 60, date: '2026-11-03', repeat: 'none', remind: 15 })).body.task;
+
+    sent = [];
+    await at('2026-11-02T09:50:00Z');
+    assert.deepEqual(sent.map((p) => p.title), ['Early']);
+    assert.equal(sent[0].body, 'Starts in 10m · 10:00 AM – 10:30 AM');
+    assert.equal(sent[0].taskId, early.id);
+    assert.equal((sent[0].actions as unknown[]).length, 2);
+    await at('2026-11-02T10:00:30Z');
+    assert.deepEqual(sent.map((p) => p.title), ['Early', 'Plain']);
+    // A reminder before a just-after-midnight task goes out the evening before.
+    await at('2026-11-02T23:50:00Z');
+    assert.equal(sent.at(-1)!.title, 'Dawn flight');
+    assert.equal(sent.at(-1)!.url, '/?day=2026-11-03');
+    await db.query('DELETE FROM tasks WHERE id = ANY($1)', [[plain.id, early.id, dawn.id]]);
+    await db.query("DELETE FROM tasks WHERE title = 'Quiet'");
+  });
+
+  test('turning task reminders off in preferences silences them', async () => {
+    const t = (await z('POST', '/api/tasks', { ...timed, title: 'Muted', start: '11:00', dur: 30, date: '2026-11-02', repeat: 'none' })).body.task;
+    assert.equal((await z('PATCH', '/api/me/prefs', { tasks: 'no' })).status, 400);
+    assert.equal((await z('PATCH', '/api/me/prefs', { morning: '25:00' })).status, 400);
+    const r = await z('PATCH', '/api/me/prefs', { tasks: false });
+    assert.equal(r.body.user.prefs.tasks, false);
+    assert.equal(r.body.user.prefs.checkin, true);
+    sent = [];
+    await at('2026-11-02T11:00:00Z');
+    assert.equal(sent.length, 0);
+    await z('PATCH', '/api/me/prefs', { tasks: true });
+    await z('DELETE', `/api/tasks/${t.id}`);
+  });
+
+  test('Done from the notification ticks once and reports the streak; snooze reminds again', async () => {
+    const t = (await z('POST', '/api/tasks', { ...timed, title: 'Stretch', start: '08:00', dur: 15, date: '2026-11-01' })).body.task;
+    await z('POST', `/api/tasks/${t.id}/toggle`, { key: '2026-11-01' });
+    await z('POST', `/api/tasks/${t.id}/toggle`, { key: '2026-11-02' });
+    const d1 = await z('POST', `/api/tasks/${t.id}/done`, { key: '2026-11-03' });
+    assert.equal(d1.body.streak, 3);
+    const d2 = await z('POST', `/api/tasks/${t.id}/done`, { key: '2026-11-03' });
+    assert.equal(d2.body.task.done['2026-11-03'], true, 'pressing Done twice never un-ticks');
+
+    sent = [];
+    assert.equal((await z('POST', '/api/push/snooze', { taskId: t.id, day: '2026-11-04' })).body.minutes, 10);
+    // Pin the snooze to 8:05 on the 4th (it was set "10 minutes from now").
+    await db.query("UPDATE push_snooze SET due_at = '2026-11-04T08:05:00Z' WHERE task_id = $1", [t.id]);
+    await at('2026-11-04T08:04:00Z');
+    assert.equal(sent.filter((p) => p.title === 'Stretch' && p.body.startsWith('Reminder')).length, 0);
+    await at('2026-11-04T08:05:10Z');
+    const again = sent.filter((p) => p.title === 'Stretch' && p.body.startsWith('Reminder'));
+    assert.equal(again.length, 1);
+    assert.equal(again[0].body, 'Reminder · 8:00 AM – 8:15 AM');
+    await z('DELETE', `/api/tasks/${t.id}`);
+  });
+
+  test('morning briefing: 30 minutes before the first task, once, with the day and a streak', async () => {
+    const yoga = (await z('POST', '/api/tasks', { ...timed, title: 'Yoga', start: '07:15', dur: 30, date: '2026-11-01', remind: -1 })).body.task;
+    await z('POST', '/api/tasks', { ...timed, title: 'Read', start: '21:00', dur: 30, date: '2026-11-01', remind: -1 });
+    for (const d of ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04']) await z('POST', `/api/tasks/${yoga.id}/toggle`, { key: d });
+    sent = [];
+    await at('2026-11-05T06:40:00Z');
+    assert.deepEqual(sent.map((p) => `${p.title}: ${p.body}`), []);
+    await at('2026-11-05T06:45:00Z');
+    await at('2026-11-05T06:46:00Z');
+    const m = sent.filter((p) => p.title.startsWith('Good morning'));
+    assert.equal(m.length, 1);
+    assert.equal(m[0].title, 'Good morning, Zoe');
+    assert.equal(m[0].body, '2 tasks today. First up: Yoga at 7:15 AM. Keep your 4-day Yoga streak going.');
+
+    // A set time instead; or off.
+    await z('PATCH', '/api/me/prefs', { morning: '08:30' });
+    await at('2026-11-06T06:45:00Z');
+    await at('2026-11-06T08:30:00Z');
+    const m2 = sent.filter((p) => p.title.startsWith('Good morning'));
+    assert.equal(m2.length, 2);
+    assert.match(m2[1].body, /First up: Read at 9:00 PM/);
+    await z('PATCH', '/api/me/prefs', { morning: 'off' });
+    await at('2026-11-07T08:30:00Z');
+    assert.equal(sent.filter((p) => p.title.startsWith('Good morning')).length, 2);
+    await z('PATCH', '/api/me/prefs', { morning: 'auto' });
+  });
+
+  test('Sunday weekly review sums up the week and opens the progress screen', async () => {
+    sent = [];
+    await at('2026-11-07T19:00:00Z'); // Saturday: nothing
+    assert.equal(sent.filter((p) => p.url === '/?view=progress').length, 0);
+    await at('2026-11-08T19:00:00Z');
+    await at('2026-11-08T19:01:00Z');
+    const r = sent.filter((p) => p.url === '/?view=progress');
+    assert.equal(r.length, 1);
+    // Week of Nov 2–8: Yoga + Read every day = 14, Yoga ticked Nov 2–4 = 3.
+    assert.match(r[0].body, /^You finished 3 of 14 tasks this week \(21%\)\./);
+    assert.equal(r[0].title, 'New week, fresh start');
+    await z('PATCH', '/api/me/prefs', { review: 'off' });
+    assert.equal((await z('GET', '/api/me')).body.user.prefs.review, 'off');
   });
 });

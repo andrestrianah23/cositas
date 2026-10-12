@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { goalInPeriod, goalProgress, weeksOfMonth } from './goals';
 import type { Task } from './types';
 
-const task = (p: Partial<Task>): Task => ({ id: 'x', kind: 'timed', title: 't', date: '2026-10-05', start: '18:00', dur: 60, color: 0, icon: 'alarm', repeat: 'daily', target: null, links: [], done: {}, ...p });
+const task = (p: Partial<Task>): Task => ({ id: 'x', kind: 'timed', title: 't', date: '2026-10-05', start: '18:00', dur: 60, color: 0, icon: 'alarm', repeat: 'daily', remind: 0, target: null, links: [], done: {}, ...p });
 
 test('a linked weekly goal completes itself at the target', () => {
   const gym = task({ id: 'gym', done: { '2026-10-05': true, '2026-10-06': true, '2026-10-08': true } });

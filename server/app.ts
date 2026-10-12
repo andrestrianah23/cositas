@@ -5,7 +5,8 @@ import { endSession, hashPassword, loadUser, requireAdmin, requireUser, startSes
 import { TASK_COLS, toTask, toUser, type Db, type UserRow } from './db';
 import { pushRoutes, sendToUser } from './push';
 import { isDoneKey, isHm, isYmd, toMin } from '../shared/dates';
-import { COLOR_COUNT, ICONS, MAX_DUR, MAX_LINKS, MAX_TARGET, REPEATS, type AdminStats, type GoalInput, type AdminUser, type NotifyResult, type Task, type TimedTaskInput } from '../shared/types';
+import { currentStreak } from '../shared/stats';
+import { COLOR_COUNT, DEFAULT_PREFS, ICONS, MAX_DUR, MAX_LINKS, MAX_TARGET, REMIND_OPTIONS, REPEATS, type AdminStats, type GoalInput, type NotifyPrefs, type AdminUser, type NotifyResult, type Task, type TimedTaskInput } from '../shared/types';
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -48,6 +49,11 @@ function timedInput(b: Record<string, unknown>, partial: boolean): Partial<Timed
   if (has('repeat')) {
     if (!REPEATS.includes(b.repeat as TimedTaskInput['repeat'])) throw bad('Invalid repeat');
     out.repeat = b.repeat as TimedTaskInput['repeat'];
+  }
+  if (has('remind')) {
+    const r = b.remind ?? 0;
+    if (!REMIND_OPTIONS.includes(r as number)) throw bad('Invalid reminder');
+    out.remind = r as number;
   }
   return out;
 }
@@ -186,6 +192,29 @@ export function createApp(db: Db) {
     res.json({ ok: true });
   });
 
+  api.patch('/me/prefs', requireUser, async (req, res) => {
+    const b = req.body ?? {};
+    const prefs: NotifyPrefs = { ...req.user!.prefs };
+    for (const k of ['tasks', 'checkin'] as const) {
+      if (k in b) {
+        if (typeof b[k] !== 'boolean') throw bad(`Invalid ${k}`);
+        prefs[k] = b[k];
+      }
+    }
+    if ('morning' in b) {
+      if (b.morning !== 'off' && b.morning !== 'auto' && !isHm(b.morning)) throw bad('Invalid morning time');
+      prefs.morning = b.morning;
+    }
+    if ('review' in b) {
+      if (b.review !== 'off' && !isHm(b.review)) throw bad('Invalid review time');
+      prefs.review = b.review;
+    }
+    // Only store what differs from the defaults, so improving a default reaches everyone who never changed it.
+    const stored = Object.fromEntries(Object.entries(prefs).filter(([k, v]) => DEFAULT_PREFS[k as keyof NotifyPrefs] !== v));
+    const { rows } = await db.query<UserRow>('UPDATE users SET notify_prefs = $1 WHERE id = $2 RETURNING *', [JSON.stringify(stored), req.user!.id]);
+    res.json({ user: toUser(rows[0]) });
+  });
+
   /** Marks the first-login tutorial as finished (or skipped) so it doesn't show again on any device. */
   api.post('/me/onboarded', requireUser, async (req, res) => {
     const { rows } = await db.query<UserRow>('UPDATE users SET onboarded_at = COALESCE(onboarded_at, now()) WHERE id = $1 RETURNING *', [req.user!.id]);
@@ -234,9 +263,9 @@ export function createApp(db: Db) {
       const t = timedInput(req.body ?? {}, false) as TimedTaskInput;
       sameDay(t.start, t.dur);
       ({ rows: [row] } = await db.query<Task>(
-        `INSERT INTO tasks (user_id, kind, title, date, start, dur, color, icon, repeat)
-         VALUES ($1, 'timed', $2, $3, $4, $5, $6, $7, $8) RETURNING ${TASK_COLS}`,
-        [req.user!.id, t.title, t.date, t.start, t.dur, t.color, t.icon, t.repeat],
+        `INSERT INTO tasks (user_id, kind, title, date, start, dur, color, icon, repeat, remind)
+         VALUES ($1, 'timed', $2, $3, $4, $5, $6, $7, $8, $9) RETURNING ${TASK_COLS}`,
+        [req.user!.id, t.title, t.date, t.start, t.dur, t.color, t.icon, t.repeat, t.remind],
       ));
     }
     res.status(201).json({ task: toTask(row) });
@@ -280,6 +309,19 @@ export function createApp(db: Db) {
       [task.id, req.user!.id, key],
     );
     res.json({ task: toTask(rows[0]) });
+  });
+
+  /** Marks one occurrence done (never undoes it): the "Done" button on a reminder. */
+  api.post('/tasks/:id/done', requireUser, async (req, res) => {
+    const task = await ownTask(req);
+    const key = req.body?.key;
+    if (!isDoneKey(key)) throw bad('Invalid key');
+    const { rows } = await db.query<Task>(
+      `UPDATE tasks SET done = done || jsonb_build_object($3::text, true) WHERE id = $1 AND user_id = $2 RETURNING ${TASK_COLS}`,
+      [task.id, req.user!.id, key],
+    );
+    const t = toTask(rows[0]);
+    res.json({ task: t, streak: isYmd(key) ? currentStreak(t, key) : 0 });
   });
 
   api.delete('/tasks/:id', requireUser, async (req, res) => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Pwa } from '../pwa';
 import { PasswordCard } from './PasswordCard';
+import { PrefsCard } from './PrefsCard';
 import type { User } from '../../shared/types';
 
 interface Props {
@@ -116,6 +117,7 @@ export function SettingsView({ me, onUser, flash, pwa, replayTour, signOut }: Pr
           </div>
         )}
       </div>
+      <PrefsCard me={me} onUser={onUser} flash={flash} pushOn={pwa.push === 'on'} />
       <div className="card install">
         <div className="install-text">
           <div className="card-title">Tutorial</div>

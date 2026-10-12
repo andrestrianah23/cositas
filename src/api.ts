@@ -1,4 +1,4 @@
-import type { AdminStats, AdminUser, GoalInput, NotifyResult, Task, TimedTaskInput, User } from '../shared/types';
+import type { AdminStats, AdminUser, GoalInput, NotifyPrefs, NotifyResult, Task, TimedTaskInput, User } from '../shared/types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -39,6 +39,7 @@ export const api = {
   signUp: (name: string, email: string, password: string) => request<{ user: User }>('POST', '/auth/signup', { name, email, password }),
   signOut: () => request<{ ok: true }>('POST', '/auth/signout'),
   rename: (name: string) => request<{ user: User }>('PATCH', '/me', { name }),
+  savePrefs: (p: Partial<NotifyPrefs>) => request<{ user: User }>('PATCH', '/me/prefs', p),
   changePassword: (current: string, next: string) => request<{ ok: true }>('POST', '/me/password', { current, next }),
   finishTutorial: () => request<{ user: User }>('POST', '/me/onboarded'),
 

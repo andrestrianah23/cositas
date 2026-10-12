@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fmtD, pad, toMin } from '../../shared/dates';
-import { ICONS, REPEATS, type TimedTaskInput } from '../../shared/types';
+import { ICONS, REMIND_OPTIONS, REPEATS, type TimedTaskInput } from '../../shared/types';
 import { COLORS, INK, LABEL, REPEAT_LABEL, SOFT } from '../theme';
 
 export type Draft = TimedTaskInput & { id: string | null };
@@ -92,6 +92,16 @@ export function TaskSheet({ draft, isWide, onClose, onSave, onDelete, flash }: P
           <div className="swatches" role="radiogroup" aria-label="Color">
             {COLORS.map((c, i) => (
               <button key={c} role="radio" aria-checked={s.color === i} aria-label={`Color ${i + 1}`} onClick={() => up({ color: i })} style={{ background: c, boxShadow: s.color === i ? `0 0 0 3px #fff, 0 0 0 5px ${c}` : 'none' }} />
+            ))}
+          </div>
+        </div>
+        <div className="sheet-section">
+          <div className="sheet-label">Remind me</div>
+          <div className="chips" role="radiogroup" aria-label="Remind me">
+            {REMIND_OPTIONS.map((m) => (
+              <button key={m} role="radio" aria-checked={s.remind === m} onClick={() => up({ remind: m })} style={{ background: s.remind === m ? color : SOFT, color: s.remind === m ? '#fff' : INK }}>
+                {m === -1 ? 'Off' : m === 0 ? 'At the start' : `${fmtD(m)} before`}
+              </button>
             ))}
           </div>
         </div>

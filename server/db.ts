@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Task, User } from '../shared/types';
+import { DEFAULT_PREFS, type NotifyPrefs, type Task, type User } from '../shared/types';
 
 export type Db = pg.Pool;
 
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_prefs jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash text PRIMARY KEY,
@@ -50,13 +51,24 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS tasks_user_id_idx ON tasks(user_id);
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target integer;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS links jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS remind integer;
 
--- One evening check-in per user per day.
-CREATE TABLE IF NOT EXISTS checkin_log (
+-- One row per scheduled notification sent (check-in, morning briefing, weekly review), so each goes out once.
+CREATE TABLE IF NOT EXISTS notify_log (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  day text NOT NULL,
+  kind text NOT NULL,
+  period text NOT NULL,
   sent_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, day)
+  PRIMARY KEY (user_id, kind, period)
+);
+
+-- "Remind me again in 10 minutes" from a notification.
+CREATE TABLE IF NOT EXISTS push_snooze (
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  day text NOT NULL,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  due_at timestamptz NOT NULL,
+  PRIMARY KEY (task_id, day)
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -97,6 +109,7 @@ export interface UserRow {
   created_at: Date;
   onboarded_at: Date | null;
   last_active_at: Date | null;
+  notify_prefs: Partial<NotifyPrefs> | null;
 }
 
 export const toUser = (r: UserRow): User => ({
@@ -107,7 +120,8 @@ export const toUser = (r: UserRow): User => ({
   status: r.status,
   created: r.created_at.getTime(),
   onboarded: r.onboarded_at !== null,
+  prefs: { ...DEFAULT_PREFS, ...(r.notify_prefs ?? {}) },
 });
 
-export const TASK_COLS = 'id, kind, title, date, start, dur, color, icon, repeat, target, links, done';
+export const TASK_COLS = 'id, kind, title, date, start, dur, color, icon, repeat, remind, target, links, done';
 export const toTask = (r: Task): Task => ({ ...r, done: r.done ?? {}, links: r.links ?? [] });
